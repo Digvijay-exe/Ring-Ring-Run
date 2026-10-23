@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Ring Ring Run</title>
 <style>
 :root{--bg:#0b0a12;--ink:#e8e2c8;--lamp:#ffd36b;--ghost:#8fffd0;--blood:#ff5a5a;--edge:#3a3860}
@@ -28,6 +28,18 @@ body.blindmode #leaderPanel{display:none}
 body.blindmode #blind{width:min(96vw,960px)!important;height:auto!important;aspect-ratio:4/3}
 body.blindmode #hud,body.blindmode #legend{width:min(96vw,960px)}
 #bstage{position:relative}
+#lbQR{display:none;gap:14px;align-items:center;margin:8px 0 10px;padding:10px;border:1px dashed var(--edge)}
+#lbQRimg{background:#fff;padding:8px;width:150px;height:150px;flex:none}
+#lbQRimg svg{width:100%;height:100%;display:block}
+#touch{position:fixed;left:0;right:0;bottom:0;display:none;justify-content:space-between;align-items:flex-end;padding:10px 14px 16px;z-index:20;touch-action:none;user-select:none;-webkit-user-select:none}
+#touch .g{display:flex;gap:min(10px,2vw);align-items:flex-end}
+#touch button{width:min(60px,14.5vw);height:min(60px,14.5vw);border-radius:50%;border:2px solid var(--lamp);background:rgba(15,14,26,.78);color:var(--lamp);font:bold 22px "Courier New",monospace;touch-action:none}
+#touch button.big{width:min(84px,20vw);height:min(84px,20vw);font-size:13px}
+#touch button:active{background:rgba(255,211,107,.35)}
+body.blindmode.touch #legend{display:none}
+body.blindmode.touch{padding-bottom:130px}
+body.blindmode.touch h1{font-size:16px;letter-spacing:3px}
+body.blindmode.touch .sub{display:none}
 #lobby{position:fixed;inset:0;z-index:50;background:rgba(5,4,10,.96);display:flex;align-items:center;justify-content:center;padding:16px}
 #lobby .box{max-width:560px;width:100%;border:2px solid var(--edge);background:#0f0e1a;padding:20px 24px;line-height:1.7}
 #lobby h2{color:var(--lamp);letter-spacing:6px;margin:0 0 6px}
@@ -44,6 +56,7 @@ kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--la
 <div class="sub">The king can't speak. Listen.</div>
 <div id="lobby"><div class="box">
   <h2>RING RING RUN</h2>
+  <div id="lbQR"><div id="lbQRimg"></div><div><b>Jury: scan to join and play</b><div class="small" id="lbQRurl"></div><div class="small">Same wifi. Headphones on. Phones play the blind roles.</div></div></div>
   <div id="lbJoin">
     Name <input id="lbName" maxlength="14" value="" placeholder="your name">
     <button id="lbJoinBtn">Join lobby</button> <button id="lbSolo">Play solo (one keyboard)</button>
@@ -59,6 +72,7 @@ kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--la
     <div id="lbHint" class="small"></div>
   </div>
 </div></div>
+<div id="touch"><div class="g"><button id="tL">◀</button><button id="tR">▶</button></div><div class="g"><button id="tB">▼</button><button id="tF">▲</button><button id="tA" class="big">ACT</button></div></div>
 <div id="wrap">
   <div class="panel" id="leaderPanel">
     <div class="label">LEADER VIEW (sighted, mute)</div>
@@ -1568,8 +1582,29 @@ async function netJoin(){
     $('lbJoin').style.display='none';$('lbRoom').style.display='block';
   }catch(err){$('lbErr').textContent='No lobby server found. Run "node server.js" on one computer, then open its address in the browser (not the file).';}
 }
+let qrUrl='';
+function showQR(url){
+  if(!url||url===qrUrl)return;
+  const draw=()=>{
+    try{
+      const q=qrcode(0,'M');q.addData(url);q.make();
+      $('lbQRimg').innerHTML=q.createSvgTag({cellSize:4,margin:0,scalable:true});
+      $('lbQRurl').textContent=url;$('lbQR').style.display='flex';qrUrl=url;
+    }catch(e){}
+  };
+  if(window.qrcode)return draw();
+  const sc=document.createElement('script');sc.src='/qrcode.js';sc.onload=draw;document.head.appendChild(sc);
+}
+if(location.protocol!=='file:')fetch('/info').then(r=>r.json()).then(j=>showQR(j.url)).catch(()=>{});
+function bindHold(id,key){
+  const b=$(id);
+  b.addEventListener('pointerdown',e=>{e.preventDefault();keys[key]=true;});
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,()=>{keys[key]=false;}));
+}
+function bindTap(id,fn){$(id).addEventListener('pointerdown',e=>{e.preventDefault();fn();});}
 function renderLobby(){
   const L=NET.lobby;if(!L)return;
+  showQR(L.url);
   $('lbAddr').textContent=(L.addrs&&L.addrs.length?L.addrs.join('  or  '):location.host);
   $('lbList').innerHTML=L.players.map(p=>'<div class="row"><span>'+(p.id===NET.id?'▶ ':'')+p.name.replace(/</g,'&lt;')+'</span><span style="color:#ffd36b">'+(p.role?ROLE_LABEL[p.role].split(' ')[0]:'(no role)')+'</span></div>').join('');
   const mine=L.players.find(p=>p.id===NET.id);
@@ -1581,7 +1616,7 @@ function renderLobby(){
   $('lbRoles').querySelectorAll('button').forEach(b=>b.onclick=()=>netSend({t:'role',role:b.dataset.r}));
   const blind=L.players.filter(p=>p.role&&p.role!=='king').length,isKing=mine&&mine.role==='king';
   $('lbStart').disabled=!(isKing&&blind>=1);
-  $('lbHint').textContent=!mine||!mine.role?'Pick a role.':isKing?(blind>=1?'Roles nobody takes are played by bots that follow the king. Start when ready.':'Waiting for at least one blind teammate to pick a role.'):'Waiting for the king to start.';
+  $('lbHint').textContent=!mine||!mine.role?(['archer','thief'].every(r=>L.players.some(p=>p.role===r))?'Both blind roles are taken. Ask someone to hand theirs over, or wait for the next round.':'Pick a role.'):isKing?(blind>=1?'Roles nobody takes are played by bots that follow the king. Start when ready.':'Waiting for at least one blind teammate to pick a role.'):'Waiting for the king to start.';
   if(started&&MODE==='king'){   /* someone left mid-game: their body becomes a bot */
     HUMANS=new Set(L.players.map(p=>p.role).filter(r=>r&&r!=='king'));
     S.players.forEach(q=>{q.human=HUMANS.has(q.id);});
@@ -1595,7 +1630,10 @@ function startNet(m){
   HUMANS=new Set(m.players.map(p=>p.role).filter(r=>r!=='king'));
   $('lobby').style.display='none';
   started=true;audio();
-  if(MODE==='blind'){document.body.classList.add('blindmode');$('bstage').appendChild($('msg'));}
+  if(MODE==='blind'){
+    document.body.classList.add('blindmode');$('bstage').appendChild($('msg'));
+    if(('ontouchstart' in window)||navigator.maxTouchPoints>0){document.body.classList.add('touch');$('touch').style.display='flex';$('tA').textContent=NET.myRole==='archer'?'SHOOT':'PICK';}
+  }
   $('legend').innerHTML=MODE==='king'
     ?'<b>You are the KING.</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move relative to where you look, <kbd>Mouse</kbd> look (click view, <kbd>Esc</kbd> frees), <kbd>Q</kbd>/<kbd>E</kbd> bell left/right, <kbd>B</kbd> bell sound, <kbd>C</kbd> look ahead.<br><kbd>2</kbd><kbd>3</kbd> peek through a teammate\'s blind view. <kbd>R</kbd> restart, <kbd>Enter</kbd> next level. Win: you at the exit with everyone alive within 4 tiles.'
     :'<b>You are '+NET.myRole.toUpperCase()+' (blind).</b> <kbd>W</kbd>/<kbd>S</kbd> walk, <kbd>A</kbd>/<kbd>D</kbd> turn. Listen for the king\'s bell: left ear = go left. Stay with the king!<br>'+(NET.myRole==='archer'?'<kbd>Space</kbd> loose an arrow (it hits friends too).':'<kbd>F</kbd> pick the lock of a door next to you (hold still, it is noisy), or shut an open one.');
@@ -1682,6 +1720,10 @@ function blindHeld(t){
   if(keys['w']||keys['arrowup']){netSend({t:'in',k:'fwd'});lastBlindSend=t;}
   else if(keys['s']||keys['arrowdown']){netSend({t:'in',k:'back'});lastBlindSend=t;}
 }
+bindHold('tF','w');bindHold('tB','s');
+bindTap('tL',()=>{if(MODE==='blind')blindPress('a');});
+bindTap('tR',()=>{if(MODE==='blind')blindPress('d');});
+bindTap('tA',()=>{if(MODE==='blind')blindPress(NET.myRole==='archer'?' ':'f');});
 $('lbJoinBtn').onclick=netJoin;
 $('lbStart').onclick=()=>netSend({t:'start'});
 $('lbSolo').onclick=()=>{MODE='solo';$('lobby').style.display='none';audio();};

@@ -15,7 +15,29 @@ let nextId = 1;
 function addrs() {
   const out = [];
   for (const list of Object.values(os.networkInterfaces()))
-    for (const i of list || []) if (i.family === 'IPv4' && !i.internal) out.push(`http://${i.address}:${PORT}`);
+    for (const i of list || []) if ((i.family === 'IPv4' || i.family === 4) && !i.internal) out.push(`http://${i.address}:${PORT}`);
+  // wifi / hotspot ranges first
+  const rank = u => /\/\/192\.168\./.test(u) ? 0 : /\/\/10\./.test(u) ? 1 : /\/\/172\.(1[6-9]|2\d|3[01])\./.test(u) ? 2 : 3;
+  out.sort((a, b) => rank(a) - rank(b));
+  return out;
+}
+// the address the QR code points at. Set PUBLIC_URL (e.g. an ngrok / cloudflared link) to override.
+function joinUrl() { return process.env.PUBLIC_URL || addrs()[0] || `http://localhost:${PORT}`; }
+let QR = null;
+try { QR = require('./qrcode.js'); } catch (e) {}
+function terminalQR(text) {
+  if (!QR) return '';
+  const q = QR(0, 'M'); q.addData(text); q.make();
+  const n = q.getModuleCount(), m = 2, dark = (r, c) => r >= 0 && c >= 0 && r < n && c < n && q.isDark(r, c);
+  let out = '';
+  for (let r = -m; r < n + m; r += 2) {          // two rows per text line; bright blocks = light modules (right polarity on a dark terminal)
+    let line = '  ';
+    for (let c = -m; c < n + m; c++) {
+      const top = !dark(r, c), bot = !dark(r + 1, c);
+      line += top && bot ? '█' : top ? '▀' : bot ? '▄' : ' ';
+    }
+    out += line + '\n';
+  }
   return out;
 }
 function send(c, msg) {
@@ -23,7 +45,7 @@ function send(c, msg) {
 }
 function lobbyFor(c) {
   return {
-    t: 'lobby', you: c.id, started, addrs: addrs(),
+    t: 'lobby', you: c.id, started, addrs: addrs(), url: joinUrl(),
     players: [...clients.values()].map(o => ({ id: o.id, name: o.name, role: o.role })),
   };
 }
@@ -72,6 +94,15 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       res.end(data);
     });
+  } else if (url.pathname === '/qrcode.js') {
+    fs.readFile(path.join(__dirname, 'qrcode.js'), (err, data) => {
+      if (err) { res.writeHead(404); return res.end(); }
+      res.writeHead(200, { 'Content-Type': 'application/javascript' });
+      res.end(data);
+    });
+  } else if (url.pathname === '/info') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify({ url: joinUrl(), addrs: addrs() }));
   } else if (url.pathname === '/join') {
     const id = 'p' + nextId++;
     const name = (url.searchParams.get('name') || 'Player').slice(0, 14);
@@ -100,8 +131,19 @@ const server = http.createServer((req, res) => {
   } else { res.writeHead(404); res.end('not found'); }
 });
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('\nRING RING RUN lobby is up.');
-  console.log('  On this computer:   http://localhost:' + PORT);
-  for (const a of addrs()) console.log('  Your friend (same wifi): ' + a);
-  console.log('');
+  const u = joinUrl();
+  console.log('\n  RING RING RUN is live.\n');
+  console.log('  You (king), on this computer:  http://localhost:' + PORT);
+  console.log('  Jury / friends, same wifi:     ' + u);
+  const others = addrs().filter(a => a !== u);
+  if (others.length) console.log('  (other addresses: ' + others.join(', ') + ')');
+  console.log('\n  Scan to join and play:\n');
+  console.log(terminalQR(u));
+  console.log('  The same QR is on the lobby screen. Everyone must be on the same wifi / hotspot.');
+  console.log('  Wifi blocks device-to-device traffic? Use your phone hotspot, or run a tunnel and start with PUBLIC_URL=https://your-link node server.js\n');
+  if (!process.env.NO_OPEN) {
+    const { exec } = require('child_process');
+    const target = 'http://localhost:' + PORT, cmd = process.platform === 'win32' ? `start "" "${target}"` : process.platform === 'darwin' ? `open "${target}"` : `xdg-open "${target}"`;
+    exec(cmd, () => {});
+  }
 });
