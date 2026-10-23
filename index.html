@@ -24,14 +24,43 @@ canvas{image-rendering:pixelated;border:2px solid var(--edge);background:#000;ma
 #msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(5,4,10,.82);padding:20px;font-size:15px;line-height:1.6}
 #msg h2{color:var(--lamp);letter-spacing:5px;font-size:28px;margin:0 0 10px}
 #msg .small{opacity:.7;font-size:12px;margin-top:10px}
+body.blindmode #leaderPanel{display:none}
+body.blindmode #blind{width:min(96vw,960px)!important;height:auto!important;aspect-ratio:4/3}
+body.blindmode #hud,body.blindmode #legend{width:min(96vw,960px)}
+#bstage{position:relative}
+#lobby{position:fixed;inset:0;z-index:50;background:rgba(5,4,10,.96);display:flex;align-items:center;justify-content:center;padding:16px}
+#lobby .box{max-width:560px;width:100%;border:2px solid var(--edge);background:#0f0e1a;padding:20px 24px;line-height:1.7}
+#lobby h2{color:var(--lamp);letter-spacing:6px;margin:0 0 6px}
+#lobby input{font:inherit;background:#1a1930;color:var(--ink);border:1px solid var(--edge);padding:6px 8px;width:100%;margin:6px 0}
+#lobby button{font:inherit;background:#1a1930;color:var(--lamp);border:1px solid var(--lamp);padding:6px 12px;margin:4px 4px 4px 0;cursor:pointer}
+#lobby button:disabled{opacity:.35;cursor:default}
+#lobby .row{display:flex;justify-content:space-between;border-bottom:1px dashed var(--edge);padding:2px 0}
+.small{opacity:.7;font-size:12px}
 kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--lamp)}
 </style>
 </head>
 <body>
 <h1>RING RING RUN</h1>
 <div class="sub">The king can't speak. Listen.</div>
+<div id="lobby"><div class="box">
+  <h2>RING RING RUN</h2>
+  <div id="lbJoin">
+    Name <input id="lbName" maxlength="14" value="" placeholder="your name">
+    <button id="lbJoinBtn">Join lobby</button> <button id="lbSolo">Play solo (one keyboard)</button>
+    <div class="small">Lobby needs <b>node server.js</b> running. Solo works from the file alone.</div>
+    <div id="lbErr" style="color:#ff8080"></div>
+  </div>
+  <div id="lbRoom" style="display:none">
+    <div class="small">Others join at: <b id="lbAddr"></b></div>
+    <div id="lbList" style="margin:8px 0"></div>
+    <div>Pick your role:</div>
+    <div id="lbRoles"></div>
+    <button id="lbStart" disabled>Start game (king only)</button>
+    <div id="lbHint" class="small"></div>
+  </div>
+</div></div>
 <div id="wrap">
-  <div class="panel">
+  <div class="panel" id="leaderPanel">
     <div class="label">LEADER VIEW (sighted, mute)</div>
     <div id="stage">
       <canvas id="leader" width="800" height="600"></canvas>
@@ -40,7 +69,7 @@ kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--la
   </div>
   <div class="panel">
     <div class="label" id="blindLabel">BLIND VIEW (the bell lights up what is near)</div>
-    <canvas id="blind" width="320" height="240"></canvas>
+    <div id="bstage"><canvas id="blind" width="320" height="240"></canvas></div>
     <div id="hud"></div>
     <div id="legend">
       <b>You control ONE person.</b> <kbd>1</kbd> king <kbd>2</kbd> scout <kbd>3</kbd> gunner <kbd>4</kbd> door-op (or <kbd>Tab</kbd>). <kbd>T</kbd> teammates follow the king on/off.<br>
@@ -68,6 +97,9 @@ const cL=$('leader'),xL=cL.getContext('2d'),cB=$('blind'),xB=cB.getContext('2d')
 xL.imageSmoothingEnabled=false;xB.imageSmoothingEnabled=false;
 const now=()=>performance.now()/1000;
 let S=null,lvl=0,started=false,bellIdx=0;
+let MODE='solo',HUMANS=new Set(),loadCount=0;  /* solo = one keyboard | king = host of an online game | blind = remote player */
+const EVQ=[];
+function netEvent(e){if(MODE==='king')EVQ.push(e);}
 const BELLS=['bell','meow','bruh'];
 
 /* ===================== AUDIO ===================== */
@@ -138,6 +170,10 @@ const sfx={
   blackout:()=>{tone('sine',52,28,0.6,0.7,0);noise(0.12,0.25,0);}
 };
 
+['shot','hurt','door','kill','win','lose','chomp','scream','blackout'].forEach(n=>{
+  const f=sfx[n];sfx[n]=()=>{f();netEvent({e:n});};
+});
+
 /* ===================== LOGIC ===================== */
 function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 /* recursive-backtracker maze + a few loops, exit at the far end, closed doors spread along the solution, ghosts far from the start */
@@ -200,7 +236,10 @@ function loadLevel(n){
   const mk=(id,role,name)=>({id,role,name,x:sx,y:sy,dir:{x:d0.x,y:d0.y},hp:3,dead:false,how:'',stunUntil:0,hurtUntil:0,lastMove:0,botNext:now()+0.8,lost:false,
     view:{x:sx+0.5,y:sy+0.5,a:Math.atan2(d0.y,d0.x)}});
   const players=[mk('king','leader','KING'),mk('scout','driver','SCOUT'),mk('gunner','gunner','GUNNER'),mk('doorop','doorop','DOOR-OP')];
-  S={grid,w,h,players,party:players[0],act:0,bi:2,ghosts,doorOpen:{},pings:[],puffs:[],ammo:L.ammo,
+  players.forEach(q=>{q.human=HUMANS.has(q.id);});
+  const hb=players.findIndex((q,i)=>i>0&&q.human);
+  loadCount++;
+  S={epoch:loadCount,grid,w,h,players,party:players[0],act:0,bi:hb>0?hb:2,ghosts,doorOpen:{},pings:[],puffs:[],ammo:L.ammo,
      state:'play',lastBell:0,shake:0,name:L.name,
      exit,shotT:-9,shotBy:'',tracer:null,gaze:Math.atan2(d0.y,d0.x),dread:0,lastT:now(),beatT:-9,nextBeat:0,nextWhisper:0,nextAmb:now()+6,
      nextBlackout:now()+12,blackoutUntil:0,scare:null,msgAt:0,note:null,waiting:[],view:players[0].view};
@@ -233,7 +272,7 @@ function bell(side){
   if(K.dead||t<K.stunUntil)return;
   if(t-S.lastBell<0.35)return;
   S.lastBell=t;
-  playBell(side);
+  playBell(side);netEvent({e:'bell',side});
   S.pings.push({t,side,x:K.x,y:K.y});
   /* the bell is noise: nearby ghosts get curious */
   S.ghosts.forEach(g=>{
@@ -241,8 +280,8 @@ function bell(side){
   });
 }
 /* only the gunner shoots, and the bullet hits the first thing in the line: ghost OR teammate */
-function shoot(){
-  const p=S.players[S.act],t=now();
+function shoot(p){
+  p=p||S.players[S.act];const t=now();
   if(p.role!=='gunner'||!canAct(p,t)||S.ammo<=0){sfx.click();return;}
   S.ammo--;sfx.shot();
   S.shotT=t;S.shotBy=p.id;
@@ -296,8 +335,8 @@ function gameOver(why){
   S.state='lose';S.loseWhy=why;S.msgAt=now()+(S.scare?1.8:0.4);
   sfx.lose();
 }
-function toggleDoor(){
-  const p=S.players[S.act];
+function toggleDoor(p){
+  p=p||S.players[S.act];
   if(p.role!=='doorop'||!canAct(p,now())){sfx.click();return;}
   for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
     const x=p.x+dx,y=p.y+dy;
@@ -444,12 +483,30 @@ function seenByKing(g){
   }
   return true;
 }
+/* dread: how close the nearest ghost is to the person you control, smoothed. Drives sound, light and screen effects.
+   Runs on whichever computer is playing that person (the king's, or a blind player's own). */
+function dreadAudio(t,dt){
+  const L=listener();
+  let nearest=null,nd=99;
+  for(const g of S.ghosts){const d=Math.hypot(g.x-L.x,g.y-L.y);if(d<nd){nd=d;nearest=g;}}
+  const target=nearest?Math.max(0,Math.min(1,1-nd/8)):0;
+  S.dread+=(target-S.dread)*(1-Math.exp(-dt*4));
+  ensureAmbient();
+  if(drone){setParam(drone.g.gain,0.025+S.dread*0.13);setParam(drone.f.frequency,130+S.dread*520);}
+  if(S.dread>0.12&&t>=S.nextBeat){beat();S.nextBeat=t+1.15-0.77*S.dread;}
+  if(nearest&&nd<9&&t>=S.nextWhisper){
+    S.nextWhisper=t+0.9+Math.random()*(2.4-S.dread*1.8);
+    whisper(bearingPan(nearest),0.5+S.dread*1.3);
+    if(nd<3&&Math.random()<0.5)setTimeout(()=>whisper(-bearingPan(nearest)*0.6,0.6+S.dread),180);  /* a second voice, behind you */
+  }
+  ambience(t);
+}
 function update(t){
   if(S.state!=='play')return;
   const dt=Math.min(0.1,Math.max(0.001,t-S.lastT));S.lastT=t;
   const stalk=!!LEVELS[lvl].stalk;
   const interval=Math.max(0.35,0.62-lvl*0.05)*(stalk?0.8:1);
-  if(assist)for(let i=1;i<S.players.length;i++){const q=S.players[i];if(i!==S.act&&canAct(q,t))botStep(q,t);}
+  if(assist)for(let i=1;i<S.players.length;i++){const q=S.players[i];if(i!==S.act&&!q.human&&canAct(q,t))botStep(q,t);}
   const L=listener();
   let nearest=null,nd=99;
   for(const g of S.ghosts){
@@ -473,18 +530,7 @@ function update(t){
     if(!S.waiting.length){win();return;}
   }
 
-  /* dread: how close the nearest ghost is to the person you control, smoothed. Drives sound, light and screen effects. */
-  const target=nearest?Math.max(0,Math.min(1,1-nd/8)):0;
-  S.dread+=(target-S.dread)*(1-Math.exp(-dt*4));
-  ensureAmbient();
-  if(drone){setParam(drone.g.gain,0.025+S.dread*0.13);setParam(drone.f.frequency,130+S.dread*520);}
-  if(S.dread>0.12&&t>=S.nextBeat){beat();S.nextBeat=t+1.15-0.77*S.dread;}
-  if(nearest&&nd<9&&t>=S.nextWhisper){
-    S.nextWhisper=t+0.9+Math.random()*(2.4-S.dread*1.8);
-    whisper(bearingPan(nearest),0.5+S.dread*1.3);
-    if(nd<3&&Math.random()<0.5)setTimeout(()=>whisper(-bearingPan(nearest)*0.6,0.6+S.dread),180);  /* a second voice, behind you */
-  }
-  ambience(t);
+  dreadAudio(t,dt);
   if(t>=S.nextBlackout&&S.dread>0.3){
     S.blackoutUntil=t+0.3+Math.random()*0.8;
     S.nextBlackout=t+7+Math.random()*9-S.dread*3;
@@ -1357,6 +1403,144 @@ function renderHud(){
   const lb=$('blindLabel');if(lb)lb.textContent='BLIND VIEW: '+S.players[S.bi].name+(S.act===S.bi?' (you)':'');
 }
 
+/* ===================== NET: lobby + online play ===================== */
+const NET={id:null,es:null,myRole:null,lobby:null,addrs:[]};
+const ROLE_IDX={king:0,scout:1,gunner:2,doorop:3};
+const ROLE_LABEL={king:'KING (sighted, rings the bell)',scout:'SCOUT (blind, fast)',gunner:'GUNNER (blind, shoots)',doorop:'DOOR-OP (blind, opens doors)'};
+let snapSeq=0,lastSnap=0,lastSeq=-1,netEpoch=-1,lastBlindSend=0;
+function netSend(m){if(!NET.id)return;try{fetch('/msg?id='+NET.id,{method:'POST',body:JSON.stringify(m),keepalive:true}).catch(()=>{});}catch(e){}}
+async function netJoin(){
+  const name=($('lbName').value||'').trim()||'Player';
+  audio();
+  try{
+    const r=await fetch('/join?name='+encodeURIComponent(name));
+    if(!r.ok)throw new Error('bad');
+    NET.id=(await r.json()).id;
+    NET.es=new EventSource('/events?id='+NET.id);
+    NET.es.onmessage=e=>onNet(JSON.parse(e.data));
+    $('lbJoin').style.display='none';$('lbRoom').style.display='block';
+  }catch(err){$('lbErr').textContent='No lobby server found. Run "node server.js" on one computer, then open its address in the browser (not the file).';}
+}
+function renderLobby(){
+  const L=NET.lobby;if(!L)return;
+  $('lbAddr').textContent=(L.addrs&&L.addrs.length?L.addrs.join('  or  '):location.host);
+  $('lbList').innerHTML=L.players.map(p=>'<div class="row"><span>'+(p.id===NET.id?'▶ ':'')+p.name.replace(/</g,'&lt;')+'</span><span style="color:#ffd36b">'+(p.role?ROLE_LABEL[p.role].split(' ')[0]:'(no role)')+'</span></div>').join('');
+  const mine=L.players.find(p=>p.id===NET.id);
+  $('lbRoles').innerHTML=Object.keys(ROLE_LABEL).map(r=>{
+    const owner=L.players.find(p=>p.role===r);
+    const dis=owner&&owner.id!==NET.id;
+    return '<button data-r="'+r+'" '+(dis?'disabled':'')+'>'+(mine&&mine.role===r?'✔ ':'')+ROLE_LABEL[r]+(dis?' — '+owner.name:'')+'</button>';
+  }).join('<br>');
+  $('lbRoles').querySelectorAll('button').forEach(b=>b.onclick=()=>netSend({t:'role',role:b.dataset.r}));
+  const blind=L.players.filter(p=>p.role&&p.role!=='king').length,isKing=mine&&mine.role==='king';
+  $('lbStart').disabled=!(isKing&&blind>=1);
+  $('lbHint').textContent=!mine||!mine.role?'Pick a role.':isKing?(blind>=1?'Roles nobody takes are played by bots that follow the king. Start when ready.':'Waiting for at least one blind teammate to pick a role.'):'Waiting for the king to start.';
+  if(started&&MODE==='king'){   /* someone left mid-game: their body becomes a bot */
+    HUMANS=new Set(L.players.map(p=>p.role).filter(r=>r&&r!=='king'));
+    S.players.forEach(q=>{q.human=HUMANS.has(q.id);});
+  }
+}
+function startNet(m){
+  const me=m.players.find(p=>p.id===NET.id);
+  if(!me)return;
+  NET.myRole=me.role;
+  MODE=me.role==='king'?'king':'blind';
+  HUMANS=new Set(m.players.map(p=>p.role).filter(r=>r!=='king'));
+  $('lobby').style.display='none';
+  started=true;audio();
+  if(MODE==='blind'){document.body.classList.add('blindmode');$('bstage').appendChild($('msg'));}
+  $('legend').innerHTML=MODE==='king'
+    ?'<b>You are the KING.</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move relative to where you look, <kbd>Mouse</kbd> look (click view, <kbd>Esc</kbd> frees), <kbd>Q</kbd>/<kbd>E</kbd> bell left/right, <kbd>B</kbd> bell sound, <kbd>C</kbd> look ahead.<br><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd> peek through a teammate\'s blind view. <kbd>R</kbd> restart, <kbd>Enter</kbd> next level. Win: you at the exit with everyone alive within 4 tiles.'
+    :'<b>You are '+NET.myRole.toUpperCase()+' (blind).</b> <kbd>W</kbd>/<kbd>S</kbd> walk, <kbd>A</kbd>/<kbd>D</kbd> turn. Listen for the king\'s bell: left ear = go left. Stay with the king!<br>'+(NET.myRole==='gunner'?'<kbd>Space</kbd> shoot (bullets hit friends too).':NET.myRole==='doorop'?'<kbd>F</kbd> open/close a door next to you.':'You are the fast one: scout ahead, but do not get lost.');
+  loadLevel(0);hideMsg();
+  if(MODE==='blind'){const i=ROLE_IDX[NET.myRole];S.act=S.bi=i;netEpoch=-1;lastSeq=-1;}
+}
+function onNet(m){
+  if(m.t==='lobby'){NET.lobby=m;renderLobby();}
+  else if(m.t==='start')startNet(m);
+  else if(m.t==='snap'&&MODE==='blind')applySnap(m);
+  else if(m.t==='in'&&MODE==='king')applyRemote(m);
+  else if(m.t==='hostleft'){alert('The king left. Back to the lobby.');location.reload();}
+}
+/* king's browser: what each remote person asked to do */
+function applyRemote(m){
+  if(S.state!=='play')return;
+  const p=S.players[ROLE_IDX[m.role]];
+  if(!p||!p.human||!canAct(p,now()))return;
+  const t=now(),cd=(p.role==='driver'?0.13:0.2)*0.8;
+  if(m.k==='fwd'&&t-p.lastMove>=cd){step(p,p.dir.x,p.dir.y,false);p.lastMove=t;}
+  else if(m.k==='back'&&t-p.lastMove>=cd){step(p,-p.dir.x,-p.dir.y,false);p.lastMove=t;}
+  else if(m.k==='turn')turn(p,m.d);
+  else if(m.k==='shoot')shoot(p);
+  else if(m.k==='door')toggleDoor(p);
+}
+function makeSnap(t){
+  const ev=EVQ.splice(0,EVQ.length);
+  return {t:'snap',seq:++snapSeq,epoch:S.epoch,lvl,state:S.state,ammo:S.ammo,bellIdx,loseWhy:S.loseWhy||'',
+    note:S.note?{text:S.note.text,age:t-S.note.t}:null,waiting:S.waiting,
+    players:S.players.map(p=>({x:p.x,y:p.y,dx:p.dir.x,dy:p.dir.y,hp:p.hp,dead:p.dead,how:p.how,stun:Math.max(0,p.stunUntil-t),hurt:Math.max(0,p.hurtUntil-t),lost:p.lost})),
+    ghosts:S.ghosts.map(g=>({id:g.id,x:g.x,y:g.y,alert:Math.max(0,g.alert-t),frozen:!!g.frozen})),
+    doors:S.doorOpen,pings:S.pings.map(q=>({side:q.side,age:t-q.t})),
+    shot:{by:S.shotBy,age:t-S.shotT},scare:S.scare?{age:t-S.scare.t,victim:S.scare.victim,name:S.scare.name}:null,
+    blackout:Math.max(0,S.blackoutUntil-t),ev};
+}
+/* a remote player's browser: copy the king's world into the local mirror, then render + play audio from it */
+function applySnap(m){
+  if(m.seq<=lastSeq)return;
+  lastSeq=m.seq;
+  const t=now(),me=ROLE_IDX[NET.myRole];
+  if(m.epoch!==netEpoch){netEpoch=m.epoch;loadLevel(m.lvl);S.act=S.bi=me;hideMsg();}
+  bellIdx=m.bellIdx;S.ammo=m.ammo;S.doorOpen=m.doors;S.waiting=m.waiting||[];S.loseWhy=m.loseWhy;
+  S.note=m.note?{text:m.note.text,t:t-m.note.age}:null;
+  m.players.forEach((q,i)=>{
+    const p=S.players[i];
+    p.x=q.x;p.y=q.y;p.dir={x:q.dx,y:q.dy};p.hp=q.hp;p.dead=q.dead;p.how=q.how;p.lost=q.lost;
+    p.stunUntil=t+q.stun;p.hurtUntil=t+q.hurt;
+  });
+  const L=S.players[me];
+  const old=S.ghosts;
+  S.ghosts=m.ghosts.map(gs=>{
+    let g=old.find(o=>o.id===gs.id);
+    if(!g)g={id:gs.id,x:gs.x,y:gs.y};
+    if((g.x!==gs.x||g.y!==gs.y)&&Math.abs(gs.x-L.x)+Math.abs(gs.y-L.y)<=7){
+      const nd=Math.abs(gs.x-L.x)+Math.abs(gs.y-L.y);
+      tone('sine',95,70,0.14,0.28*(1-nd/8),Math.sin(Math.atan2(gs.y-L.y,gs.x-L.x)-L.view.a));
+    }
+    g.x=gs.x;g.y=gs.y;g.alert=t+gs.alert;g.frozen=gs.frozen;
+    return g;
+  });
+  S.pings=m.pings.map(q=>({side:q.side,t:t-q.age}));
+  S.shotBy=m.shot.by;S.shotT=t-m.shot.age;
+  S.blackoutUntil=t+m.blackout;
+  if(m.scare&&!S.scare)S.scare={t:t-m.scare.age,victim:m.scare.victim,name:m.scare.name};
+  for(const e of m.ev||[]){
+    if(e.e==='bell')playBell(e.side);
+    else if(sfx[e.e])sfx[e.e]();
+  }
+  if(m.state!==S.state){
+    S.state=m.state;
+    if(m.state==='win')showMsg('ESCAPED','Level '+(m.lvl+1)+' clear<div class="small">Waiting for the king to continue.</div>');
+    else if(m.state==='lose')S.msgAt=now()+(S.scare?1.8:0.4);
+  }
+}
+/* blind remote player's controls: W/S walk, A/D turn, Space shoot (gunner), F door (door-op) */
+function blindPress(k){
+  if(k==='a'||k==='arrowleft')netSend({t:'in',k:'turn',d:-1});
+  else if(k==='d'||k==='arrowright')netSend({t:'in',k:'turn',d:1});
+  else if(k===' ')netSend({t:'in',k:'shoot'});
+  else if(k==='f')netSend({t:'in',k:'door'});
+}
+function blindHeld(t){
+  if(S.state!=='play'||t-lastBlindSend<0.17)return;
+  if(keys['w']||keys['arrowup']){netSend({t:'in',k:'fwd'});lastBlindSend=t;}
+  else if(keys['s']||keys['arrowdown']){netSend({t:'in',k:'back'});lastBlindSend=t;}
+}
+$('lbJoinBtn').onclick=netJoin;
+$('lbStart').onclick=()=>netSend({t:'start'});
+$('lbSolo').onclick=()=>{MODE='solo';$('lobby').style.display='none';audio();};
+$('lbName').addEventListener('keydown',e=>{if(e.key==='Enter')netJoin();e.stopPropagation();});
+$('lbName').value='Player'+(1+Math.floor(Math.random()*99));
+
 /* ===================== INPUT + LOOP ===================== */
 const keys={};
 const ABS_MOVES=[['arrowup',0,-1],['arrowdown',0,1],['arrowleft',-1,0],['arrowright',1,0]];
@@ -1377,13 +1561,16 @@ function moveTable(){
 }
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
+  if($('lobby').style.display!=='none')return;
   if(['arrowup','arrowdown','arrowleft','arrowright',' ','tab'].includes(k))e.preventDefault();
   keys[k]=true;
+  if(MODE==='blind'){if(!e.repeat)blindPress(k);return;}
   if(!started){started=true;audio();hideMsg();return;}
   if(e.repeat)return;
   if(k==='r'){loadLevel(S.state==='win'&&lvl>=LEVELS.length-1?0:lvl);return;}
   if(k==='t'){assist=!assist;return;}
-  if(S.state==='play'&&(k>='1'&&k<='4'||k==='tab')){
+  if(MODE==='king'&&k>='2'&&k<='4'){S.bi=Number(k)-1;return;}   /* online: the king only chooses which blind view to peek at */
+  if(S.state==='play'&&MODE==='solo'&&(k>='1'&&k<='4'||k==='tab')){
     let i=k==='tab'?(S.act+1)%4:Number(k)-1;
     for(let n=0;n<4&&S.players[i].dead;n++)i=(i+1)%4;
     if(!S.players[i].dead){S.act=i;if(i>0)S.bi=i;}
@@ -1426,6 +1613,14 @@ addEventListener('mousemove',e=>{
 let lastFrame=now();
 function frame(){
   const t=now(),dt=Math.min(0.1,Math.max(0.001,t-lastFrame));lastFrame=t;
+  if(MODE==='blind'){
+    blindHeld(t);
+    if(S.state==='play')dreadAudio(t,dt);else if(drone)setParam(drone.g.gain,0.0);
+    if(S.state==='lose'&&S.msgAt&&t>S.msgAt){S.msgAt=0;showMsg('CAUGHT',(S.loseWhy||'The ghosts found you.')+'<div class="small">The king restarts the run.</div>');}
+    updateView(dt);renderBlind();renderHud();
+    requestAnimationFrame(frame);return;
+  }
+  if(MODE==='king'&&t-lastSnap>0.05){lastSnap=t;netSend(makeSnap(t));}
   const ap=S.players[S.act];
   if(S.state==='play'&&started&&canAct(ap,t)&&t-ap.lastMove>(ap.role==='leader'?0.14:ap.role==='driver'?0.13:0.2)){
     if(S.act===0){
