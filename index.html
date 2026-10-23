@@ -31,6 +31,7 @@ body.blindmode #hud,body.blindmode #legend{width:min(96vw,960px)}
 #lbQR{display:none;gap:14px;align-items:center;margin:8px 0 10px;padding:10px;border:1px dashed var(--edge)}
 #lbQRimg{background:#fff;padding:8px;width:150px;height:150px;flex:none}
 #lbQRimg svg{width:100%;height:100%;display:block}
+#cut{position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:100;display:none;image-rendering:pixelated;image-rendering:crisp-edges;cursor:pointer}
 #vcBtn{position:fixed;top:8px;right:8px;z-index:30;background:rgba(15,14,26,.85);color:var(--lamp);border:2px solid var(--lamp);font:bold 12px "Courier New",monospace;padding:6px 10px;cursor:pointer}
 #vcBtn.off{color:#ff7b7b;border-color:#ff7b7b}
 #vcBtn.talk{box-shadow:0 0 10px #7dff9a;border-color:#7dff9a}
@@ -75,7 +76,7 @@ kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--la
     <div id="lbHint" class="small"></div>
   </div>
 </div></div>
-<button id="vcBtn" style="display:none"></button><div id="vcAudio"></div>
+<button id="vcBtn" style="display:none"></button><div id="vcAudio"></div><canvas id="cut" width="320" height="180"></canvas>
 <div id="touch"><div class="g"><button id="tL">◀</button><button id="tR">▶</button></div><div class="g"><button id="tB">▼</button><button id="tF">▲</button><button id="tA" class="big">ACT</button></div></div>
 <div id="wrap">
   <div class="panel" id="leaderPanel">
@@ -597,7 +598,7 @@ function dreadAudio(t,dt){
   ambience(t);
 }
 function update(t){
-  if(S.state!=='play')return;
+  if(S.state!=='play'||CUT)return;
   const dt=Math.min(0.1,Math.max(0.001,t-S.lastT));S.lastT=t;
   const stalk=!!LEVELS[lvl].stalk;
   const interval=Math.max(0.35,0.62-lvl*0.05)*(stalk?0.8:1);
@@ -675,7 +676,7 @@ function drawScare(ctx,CW,CH,t){
 }
 function win(){
   S.state='win';S.note=null;sfx.win();
-  if(lvl>=LEVELS.length-1)showMsg('ALL CLEAR','You rang your way out of every maze.<div class="small">Press <kbd>R</kbd> to replay from level 1</div>',true);
+  if(lvl>=LEVELS.length-1){const fin=()=>showMsg('ALL CLEAR','You rang your way out of every maze.<div class="small">Press <kbd>R</kbd> to replay from level 1</div>',true);playCut('outro',fin);}
   else showMsg('ESCAPED','Level '+(lvl+1)+' clear<div class="small">Press <kbd>Enter</kbd> for the next level</div>');
 }
 function nextLevel(){loadLevel(Math.min(lvl+1,LEVELS.length-1));}
@@ -1735,6 +1736,7 @@ function startNet(m){
     ?'<b>You are the KING.</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move relative to where you look, <kbd>Mouse</kbd> look (click view, <kbd>Esc</kbd> frees), <kbd>Q</kbd>/<kbd>E</kbd> bell left/right, <kbd>B</kbd> bell sound, <kbd>C</kbd> look ahead.<br><kbd>2</kbd><kbd>3</kbd> peek through a teammate\'s blind view. <kbd>R</kbd> restart, <kbd>Enter</kbd> next level. Win: you at the exit with everyone alive within 4 tiles.'
     :'<b>You are '+NET.myRole.toUpperCase()+' (blind).</b> <kbd>W</kbd>/<kbd>S</kbd> walk, <kbd>A</kbd>/<kbd>D</kbd> turn. Listen for the king\'s bell: left ear = go left. Stay with the king!<br>'+(NET.myRole==='archer'?'<kbd>Space</kbd> loose an arrow (it hits friends too).':'<kbd>F</kbd> pick the lock of a door next to you (hold still, it is noisy), or shut an open one.');
   loadLevel(0);hideMsg();
+  if(!introShown){introShown=true;playCut('intro');}
   if(MODE==='blind'){const i=ROLE_IDX[NET.myRole];S.act=S.bi=i;netEpoch=-1;lastSeq=-1;}
 }
 
@@ -1870,7 +1872,7 @@ function applySnap(m){
   }
   if(m.state!==S.state){
     S.state=m.state;
-    if(m.state==='win')showMsg('ESCAPED','Level '+(m.lvl+1)+' clear<div class="small">Waiting for the king to continue.</div>');
+    if(m.state==='win'){if(m.lvl>=LEVELS.length-1)playCut('outro',()=>showMsg('ALL CLEAR','You rang your way out of every maze.<div class="small">The king can replay from level 1.</div>',true));else showMsg('ESCAPED','Level '+(m.lvl+1)+' clear<div class="small">Waiting for the king to continue.</div>');}
     else if(m.state==='lose')S.msgAt=now()+(S.scare?1.8:0.4);
   }
 }
@@ -1916,11 +1918,11 @@ function moveTable(){
 }
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
-  if($('lobby').style.display!=='none')return;
+  if($('lobby').style.display!=='none'||CUT)return;
   if(['arrowup','arrowdown','arrowleft','arrowright',' ','tab'].includes(k))e.preventDefault();
   keys[k]=true;
   if(MODE==='blind'){if(!e.repeat)blindPress(k);return;}
-  if(!started){started=true;audio();hideMsg();return;}
+  if(!started){started=true;audio();hideMsg();if(!introShown){introShown=true;playCut('intro');}return;}
   if(e.repeat)return;
   if(k==='r'){loadLevel(S.state==='win'&&lvl>=LEVELS.length-1?0:lvl);return;}
   if(k==='t'){assist=!assist;return;}
@@ -1949,7 +1951,7 @@ addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
 
 /* mouse look: click the view to capture the mouse (Esc releases); dragging also works */
 let dragging=false;
-function startIfNeeded(){if(!started){started=true;audio();hideMsg();}}
+function startIfNeeded(){if(!started){started=true;audio();hideMsg();if(!introShown){introShown=true;playCut('intro');}}}
 function grab(){
   startIfNeeded();
   if(cL.requestPointerLock&&document.pointerLockElement!==cL){try{cL.requestPointerLock();}catch(err){}}
@@ -1965,6 +1967,140 @@ addEventListener('mousemove',e=>{
   while(S.gaze<-Math.PI)S.gaze+=2*Math.PI;
 });
 
+
+/* ===================== CUTSCENES (320x180 pixel-art, any key / tap skips) ===================== */
+let CUT=null,introShown=false,outroShown=false;
+function playCut(kind,done){
+  if(CUT)return;
+  const cv=$('cut'),x=cv.getContext('2d');x.imageSmoothingEnabled=false;
+  cv.style.display='block';audio();
+  const T0=now(),DUR=kind==='intro'?8:9.5;
+  CUT={kind};let lastStep=-1,fin=false;
+  const finish=()=>{if(fin)return;fin=true;cv.style.display='none';removeEventListener('keydown',skip,true);cv.removeEventListener('pointerdown',skip);CUT=null;done&&done();};
+  const skip=e=>{if(now()-T0>0.7)finish();};
+  addEventListener('keydown',skip,true);cv.addEventListener('pointerdown',skip);
+  const tick=()=>{
+    if(fin)return;
+    const t=now()-T0;
+    if(t>=DUR)return finish();
+    const sr=kind==='intro'?2.6:5.5,st=Math.floor(t*sr);
+    if(st!==lastStep&&t>0.3){lastStep=st;if(kind==='intro'?t<5.8:t>0.6&&t<7)tone('sine',85,45,0.08,0.13,0);}
+    drawCut(kind,x,t,DUR);
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+function cutBG(x,t,dawn,sunY){
+  const W=320,H=180,G=142;
+  const sky=dawn?[[18,12,40],[40,20,60],[78,30,70],[130,48,70],[190,86,60],[236,140,70],[250,190,100]]:[[5,4,16],[8,6,24],[12,8,32],[18,10,40],[26,12,46],[34,14,50],[44,16,52]];
+  const bh=G/sky.length;
+  sky.forEach((c,i)=>{x.fillStyle='rgb('+c+')';x.fillRect(0,Math.floor(i*bh),W,Math.ceil(bh)+1);});
+  if(!dawn){for(let i=0;i<60;i++){const sx=hash(i,1,5)*W,sy=hash(i,2,5)*90;x.fillStyle='rgba(255,240,200,'+(0.3+0.5*Math.abs(Math.sin(t*1.5+i)))+')';x.fillRect(Math.floor(sx),Math.floor(sy),1,1);}
+    x.fillStyle='#d8d4b8';x.beginPath();x.arc(70,34,13,0,7);x.fill();x.fillStyle='#b9b497';x.beginPath();x.arc(66,31,3,0,7);x.arc(75,39,2,0,7);x.fill();}
+  else{x.fillStyle='#ffe08a';x.beginPath();x.arc(235,sunY,20,0,7);x.fill();x.fillStyle='rgba(255,200,100,.25)';x.beginPath();x.arc(235,sunY,32,0,7);x.fill();}
+  /* dead trees */
+  x.fillStyle=dawn?'#2a1424':'#07050d';
+  [[30,G],[118,G],[176,G],[300,G]].forEach(([tx,ty],i)=>{
+    const h=44+hash(i,3,6)*26;x.fillRect(tx,ty-h,3,h);
+    for(let b=0;b<4;b++){const by=ty-h+8+b*9,dir=b%2?1:-1,l=8+hash(i,b,7)*10;x.fillRect(tx+(dir>0?3:-l),by,l,2);x.fillRect(tx+(dir>0?3+l-2:-l),by-4,2,5);}
+  });
+  /* ground */
+  x.fillStyle=dawn?'#2b1a1e':'#0b0910';x.fillRect(0,G,W,H-G);
+  for(let i=0;i<140;i++){const gx=hash(i,4,8)*W,gy=G+hash(i,5,8)*(H-G);x.fillStyle=hash(i,6,8)>0.5?(dawn?'#4a2c2c':'#171321'):(dawn?'#1c1014':'#06050a');x.fillRect(Math.floor(gx),Math.floor(gy),2,1);}
+  x.fillStyle=dawn?'#3a2024':'#120f1c';x.fillRect(0,G,W,2);
+}
+function cutRuin(x,t,fx,dx,glow){
+  /* a broken brick facade 120 wide with an arched doorway starting at dx; fx = left edge */
+  const G=142,top=48;
+  x.fillStyle='#34314a';x.fillRect(fx,top,120,G-top);
+  for(let r=0;r<(G-top)/6;r++){
+    const y=top+r*6;x.fillStyle='#1e1c30';x.fillRect(fx,y+5,120,1);
+    for(let c=(r&1)*8;c<120;c+=16)x.fillRect(fx+c,y,1,6);
+  }
+  for(let i=0;i<260;i++){const px=fx+hash(i,1,9)*120,py=top+hash(i,2,9)*(G-top);x.fillStyle=hash(i,3,9)>0.5?'#4a4666':'#25233a';x.fillRect(Math.floor(px),Math.floor(py),2,1);}
+  x.fillStyle='#3a5a44';for(let i=0;i<40;i++){const px=fx+hash(i,4,9)*120,py=G-4-hash(i,5,9)*26;x.fillRect(Math.floor(px),Math.floor(py),2,2);}
+  x.fillStyle='#6e1010';[[fx+14,1],[fx+96,0]].forEach(([bx,k])=>{x.fillRect(bx,top+2,2,18+k*10);x.fillRect(bx+3,top+2,1,9);});
+  /* top crenellation */
+  x.fillStyle='#34314a';for(let c=0;c<120;c+=20)x.fillRect(fx+c,top-8,12,8);
+  /* the door */
+  const w=36;x.fillStyle='#000';x.fillRect(dx,G-70,w,70);x.beginPath();x.arc(dx+w/2,G-70,w/2,Math.PI,0);x.fill();
+  const g=x.createRadialGradient(dx+w/2,G-30,2,dx+w/2,G-30,46);g.addColorStop(0,'rgba(190,30,30,'+(glow*(0.55+0.15*Math.sin(t*7)))+')');g.addColorStop(1,'rgba(190,30,30,0)');
+  x.fillStyle=g;x.fillRect(dx-30,G-90,w+60,100);
+  x.fillStyle='#4a4666';x.fillRect(dx-3,G-70,3,70);x.fillRect(dx+w,G-70,3,70);
+  x.fillStyle='#2a2840';x.fillRect(dx-4,G-4,w+8,4);
+}
+function cutChar(x,role,cx,feet,sc,o){
+  o=o||{};
+  const c=roleCanv(role),w=48*sc,h=64*sc,bob=o.bob?Math.abs(Math.sin(o.bob))*o.bobA:0;
+  x.save();x.globalAlpha=o.alpha==null?1:Math.max(0,Math.min(1,o.alpha));
+  x.translate(cx,feet-bob);x.rotate(o.lean||0);
+  x.fillStyle='rgba(0,0,0,.35)';x.beginPath();x.ellipse(0,bob,w*0.32,2.5,0,0,7);x.fill();
+  if(o.flip)x.scale(-1,1);
+  x.drawImage(c,-w/2,-h,w,h);
+  x.restore();
+}
+function cutFog(x,t,a){
+  for(let i=0;i<6;i++){const fx=((t*(6+i*2)+i*70)%420)-50;x.fillStyle='rgba(150,140,190,'+a+')';x.beginPath();x.ellipse(fx,138+(i%3)*5,48,7,0,0,7);x.fill();}
+}
+function cutText(x,txt,a,y){
+  x.save();x.globalAlpha=Math.max(0,Math.min(1,a));x.textAlign='center';x.font='bold 9px "Courier New",monospace';
+  x.fillStyle='#000';x.fillText(txt,161,(y||166)+1);x.fillStyle='#ffd36b';x.fillText(txt,160,y||165);x.restore();
+}
+function cutBig(x,txt,a,y){
+  x.save();x.globalAlpha=Math.max(0,Math.min(1,a));x.textAlign='center';x.font='bold 22px "Courier New",monospace';
+  x.fillStyle='#000';x.fillText(txt,162,y+2);x.fillStyle='#ffd36b';x.fillText(txt,160,y);x.restore();
+}
+const fade=(t,a,b)=>Math.max(0,Math.min(1,(t-a)/(b-a)));
+function drawCut(kind,x,t,DUR){
+  const G=142,SC=1.15;
+  if(kind==='intro'){
+    cutBG(x,t,false);
+    cutRuin(x,t,200,236,1);
+    cutFog(x,t,0.10);
+    /* the king is shoved along; thief and archer lean into his back */
+    const door=254,e=Math.min(1,t/4.4),kx=-14+e*(door+30+14)-6*Math.max(0,Math.sin(t*5))*(t<4.2?1:0);
+    const swallow=cx=>1-fade(cx,door-6,door+16);
+    const bobk=t*5.2;
+    const ax=kx-44,tx=kx-80;
+    cutChar(x,'thief',tx,G+3,SC,{bob:bobk+1,bobA:2,lean:0.13,alpha:swallow(tx)});
+    cutChar(x,'archer',ax,G+3,SC,{bob:bobk+2,bobA:2,lean:0.13,alpha:swallow(ax)});
+    cutChar(x,'leader',kx,G+3,SC,{bob:bobk,bobA:3,lean:-0.1,alpha:swallow(kx)});
+    /* his objections */
+    if(t>0.8&&t<4.2&&Math.floor(t*3)%2===0){x.fillStyle='#fff';x.font='bold 10px "Courier New",monospace';x.fillText('!?',kx+4,G-82);}
+    x.fillStyle='rgba(0,0,0,'+(0.6*(1-fade(t,0,0.8)))+')';x.fillRect(0,0,320,180);
+    cutText(x,'The king cannot speak.',fade(t,0.8,1.3)*(1-fade(t,3,3.4)),166);
+    cutText(x,'So his friends push him in.',fade(t,3.2,3.7)*(1-fade(t,5.6,6)),166);
+    if(t>6)cutBig(x,'RING RING RUN',fade(t,6,6.6),98);
+    if(t>6.4)cutText(x,'Listen for the bell.',fade(t,6.4,7),166);
+    x.fillStyle='rgba(0,0,0,'+fade(t,DUR-0.5,DUR)+')';x.fillRect(0,0,320,180);
+  }else{
+    const sunY=150-fade(t,0,8)*58;
+    cutBG(x,t,true,sunY);
+    cutRuin(x,t,0,34,1-fade(t,3,7)*0.8);
+    cutFog(x,t,0.08);
+    const door=52,run=t*9;
+    const px=(t0,sp)=>door-4+(t-t0)*sp;
+    const appear=cx=>fade(cx,door-10,door+22);
+    /* the ghost lunges out of the doorway after them, then burns off in the dawn */
+    const gt=t-3.4;
+    if(gt>0){
+      const gc=monSprite('a',2,Math.floor(t*8)%MON_FRAMES),gh=84,gw=gc.width/gc.height*gh,gx=door+gt*17,ga=Math.max(0,(1-fade(t,4.8,7.4)))*Math.min(1,gt*1.5);
+      x.save();x.globalAlpha=ga*(0.7+0.3*Math.sin(t*30));x.drawImage(gc,gx-gw/2,G+2-gh-Math.abs(Math.sin(t*4))*3,gw,gh);x.restore();
+    }
+    const SPD=42;
+    const kx=px(0.6,SPD),ax=px(1.7,SPD),tx=px(2.8,SPD);
+    [['leader',kx,0],['archer',ax,1],['thief',tx,2]].forEach(([r,cx,i])=>{
+      if(cx>350)return;
+      cutChar(x,r,cx,G+3,SC,{bob:run+i*2,bobA:4,lean:0.16,alpha:appear(cx)});
+    });
+    cutText(x,'RUN!',fade(t,0.3,0.7)*(1-fade(t,2.4,2.8)),166);
+    cutText(x,'The dead do not like the sun.',fade(t,3.6,4.1)*(1-fade(t,6.4,6.9)),166);
+    if(t>6.6)cutBig(x,'ALL CLEAR',fade(t,6.6,7.2),92);
+    if(t>7)cutText(x,'You rang your way out.',fade(t,7,7.6),166);
+    if(Math.abs(t-7.2)<0.03)tone('triangle',784,784,0.8,0.25,0);
+    x.fillStyle='rgba(0,0,0,'+fade(t,DUR-0.6,DUR)+')';x.fillRect(0,0,320,180);
+  }
+}
 let lastFrame=now();
 function frame(){
   const t=now(),dt=Math.min(0.1,Math.max(0.001,t-lastFrame));lastFrame=t;
