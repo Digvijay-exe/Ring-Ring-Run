@@ -2,11 +2,13 @@
 // Everyone opens http://<this-computer's-address>:3000 in a browser.
 // The KING's browser runs the game; this server only hosts the lobby and passes messages around.
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const PORT = process.env.PORT || 3000;
+const PORT = +process.env.PORT || 3000;
+const HPORT = +process.env.HTTPS_PORT || PORT + 1;   // https twin: phones only allow the microphone on https
 const ROLES = ['king', 'archer', 'thief'];
 const clients = new Map(); // id -> {id,name,role,res}
 let started = false;
@@ -22,7 +24,10 @@ function addrs() {
   return out;
 }
 // the address the QR code points at. Set PUBLIC_URL (e.g. an ngrok / cloudflared link) to override.
-function joinUrl() { return process.env.PUBLIC_URL || addrs()[0] || `http://localhost:${PORT}`; }
+let TLS = null;
+try { if (!process.env.NO_HTTPS) TLS = { key: fs.readFileSync(path.join(__dirname, 'key.pem')), cert: fs.readFileSync(path.join(__dirname, 'cert.pem')) }; } catch (e) {}
+function httpsAddrs() { return TLS ? addrs().map(u => u.replace('http:', 'https:').replace(':' + PORT, ':' + HPORT)) : []; }
+function joinUrl() { return process.env.PUBLIC_URL || httpsAddrs()[0] || addrs()[0] || `http://localhost:${PORT}`; }
 let QR = null;
 try { QR = require('./qrcode.js'); } catch (e) {}
 function terminalQR(text) {
@@ -68,6 +73,11 @@ function handle(c, m) {
     }
     return;
   }
+  if (m.t === 'vc') {   // voice-chat signalling: pass straight to one named person (works in the lobby too)
+    const o = clients.get(m.to);
+    if (o) send(o, Object.assign({}, m, { from: c.id }));
+    return;
+  }
   if (!started) return;
   const k = king();
   if (!k) return;
@@ -86,7 +96,7 @@ function drop(c) {
   broadcastLobby();
 }
 
-const server = http.createServer((req, res) => {
+function app(req, res) {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/' || url.pathname === '/index.html') {
     fs.readFile(path.join(__dirname, 'index.html'), (err, data) => {
@@ -129,12 +139,15 @@ const server = http.createServer((req, res) => {
       handle(c, m);
     });
   } else { res.writeHead(404); res.end('not found'); }
-});
+}
+const server = http.createServer(app);
+if (TLS) https.createServer(TLS, app).listen(HPORT, '0.0.0.0');
 server.listen(PORT, '0.0.0.0', () => {
   const u = joinUrl();
   console.log('\n  RING RING RUN is live.\n');
   console.log('  You (king), on this computer:  http://localhost:' + PORT);
-  console.log('  Jury / friends, same wifi:     ' + u);
+  console.log('  Jury / friends, same wifi:     ' + u + (TLS && !process.env.PUBLIC_URL ? '   (https: needed for voice chat; the browser warns about the certificate, tap Advanced > Proceed)' : ''));
+  if (TLS && !process.env.PUBLIC_URL) console.log('  No-voice fallback without a warning:  ' + (addrs()[0] || 'http://localhost:' + PORT));
   const others = addrs().filter(a => a !== u);
   if (others.length) console.log('  (other addresses: ' + others.join(', ') + ')');
   console.log('\n  Scan to join and play:\n');
