@@ -27,7 +27,7 @@ function addrs() {
 let TLS = null;
 try { if (!process.env.NO_HTTPS) TLS = { key: fs.readFileSync(path.join(__dirname, 'key.pem')), cert: fs.readFileSync(path.join(__dirname, 'cert.pem')) }; } catch (e) {}
 function httpsAddrs() { return TLS ? addrs().map(u => u.replace('http:', 'https:').replace(':' + PORT, ':' + HPORT)) : []; }
-function joinUrl() { return process.env.PUBLIC_URL || httpsAddrs()[0] || addrs()[0] || `http://localhost:${PORT}`; }
+function joinUrl() { return process.env.PUBLIC_URL || addrs()[0] || `http://localhost:${PORT}`; }
 let QR = null;
 try { QR = require('./qrcode.js'); } catch (e) {}
 function terminalQR(text) {
@@ -146,8 +146,8 @@ server.listen(PORT, '0.0.0.0', () => {
   const u = joinUrl();
   console.log('\n  RING RING RUN is live.\n');
   console.log('  You (king), on this computer:  http://localhost:' + PORT);
-  console.log('  Jury / friends, same wifi:     ' + u + (TLS && !process.env.PUBLIC_URL ? '   (https: needed for voice chat; the browser warns about the certificate, tap Advanced > Proceed)' : ''));
-  if (TLS && !process.env.PUBLIC_URL) console.log('  No-voice fallback without a warning:  ' + (addrs()[0] || 'http://localhost:' + PORT));
+  console.log('  Jury / friends, same wifi:     ' + u + '   (QR points here; plain http, most reliable)');
+  if (TLS && !process.env.PUBLIC_URL) console.log('  Phone voice chat (optional):   ' + httpsAddrs()[0] + '   (certificate warning: Advanced > Proceed)');
   const others = addrs().filter(a => a !== u);
   if (others.length) console.log('  (other addresses: ' + others.join(', ') + ')');
   console.log('\n  Scan to join and play:\n');

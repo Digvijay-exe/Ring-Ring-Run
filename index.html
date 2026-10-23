@@ -33,8 +33,32 @@ body.blindmode #hud,body.blindmode #legend{width:min(96vw,960px)}
 #lbQRimg svg{width:100%;height:100%;display:block}
 #cut{position:fixed;inset:0;width:100vw;height:100vh;object-fit:contain;background:#000;z-index:100;display:none;image-rendering:pixelated;image-rendering:crisp-edges;cursor:pointer}
 #vcBtn{position:fixed;top:8px;right:8px;z-index:30;background:rgba(15,14,26,.85);color:var(--lamp);border:2px solid var(--lamp);font:bold 12px "Courier New",monospace;padding:6px 10px;cursor:pointer}
+body.touch #vcBtn{font-size:10px;padding:4px 7px;top:4px;right:4px}
 #vcBtn.off{color:#ff7b7b;border-color:#ff7b7b}
 #vcBtn.talk{box-shadow:0 0 10px #7dff9a;border-color:#7dff9a}
+
+#ktouch{position:fixed;left:0;right:0;bottom:0;display:none;justify-content:space-between;align-items:flex-end;padding:8px 10px 14px;z-index:20;touch-action:none;user-select:none;-webkit-user-select:none}
+#ktouch .kd{display:grid;grid-template-columns:repeat(3,min(54px,13.5vw));grid-template-rows:repeat(2,min(54px,13.5vw));gap:6px}
+#ktouch .kd .up{grid-column:2}
+#ktouch .kd #kL{grid-column:1;grid-row:2}#ktouch .kd #kB{grid-column:2;grid-row:2}#ktouch .kd #kR{grid-column:3;grid-row:2}
+#ktouch .kb{display:flex;gap:10px;align-items:flex-end}
+#ktouch button{border-radius:50%;border:2px solid var(--lamp);background:rgba(15,14,26,.8);color:var(--lamp);font:bold 20px "Courier New",monospace;touch-action:none;padding:0}
+#ktouch button.big{width:min(86px,22vw);height:min(86px,22vw);font-size:12px;line-height:1.3;border-color:#ffd36b;background:rgba(60,40,10,.8)}
+#ktouch button:active{background:rgba(255,211,107,.4)}
+#kbar{display:none;flex-wrap:wrap;gap:6px}
+#kbar button{flex:1 1 45%;padding:9px 6px;background:#15132a;color:var(--lamp);border:1px solid var(--edge);font:bold 12px "Courier New",monospace}
+#kbar button:active{background:#2a2550}
+body.kingtouch #ktouch{display:flex}body.kingtouch #kbar{display:flex}
+body.kingtouch #legend{display:none}
+body.kingtouch{padding-bottom:150px}
+body.kingtouch h1{font-size:16px;letter-spacing:3px}body.kingtouch .sub{display:none}
+body.kingtouch #wrap{flex-direction:column;align-items:center;gap:8px;width:100%}
+body.kingtouch #leaderPanel{width:100%}
+body.kingtouch #leader{width:100%;touch-action:none}
+body.kingtouch .panel{width:100%;align-items:center}
+body.kingtouch #blindLabel,body.kingtouch #bstage,body.kingtouch #kP1,body.kingtouch #kP2{display:none!important}
+body.kingtouch #blind{width:min(66vw,280px)!important;height:auto!important;aspect-ratio:4/3}
+body.kingtouch #hud,body.kingtouch #kbar{width:min(96vw,420px)}
 #touch{position:fixed;left:0;right:0;bottom:0;display:none;justify-content:space-between;align-items:flex-end;padding:10px 14px 16px;z-index:20;touch-action:none;user-select:none;-webkit-user-select:none}
 #touch .g{display:flex;gap:min(10px,2vw);align-items:flex-end}
 #touch button{width:min(60px,14.5vw);height:min(60px,14.5vw);border-radius:50%;border:2px solid var(--lamp);background:rgba(15,14,26,.78);color:var(--lamp);font:bold 22px "Courier New",monospace;touch-action:none}
@@ -78,6 +102,7 @@ kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--la
 </div></div>
 <button id="vcBtn" style="display:none"></button><div id="vcAudio"></div><canvas id="cut" width="320" height="180"></canvas>
 <div id="touch"><div class="g"><button id="tL">◀</button><button id="tR">▶</button></div><div class="g"><button id="tB">▼</button><button id="tF">▲</button><button id="tA" class="big">ACT</button></div></div>
+<div id="ktouch"><div class="kd"><button id="kF" class="up">▲</button><button id="kL">◀</button><button id="kB">▼</button><button id="kR">▶</button></div><div class="kb"><button id="kBL" class="big">🔔<br>LEFT</button><button id="kBR" class="big">🔔<br>RIGHT</button></div></div>
 <div id="wrap">
   <div class="panel" id="leaderPanel">
     <div class="label">LEADER VIEW (sighted, mute)</div>
@@ -90,6 +115,7 @@ kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--la
     <div class="label" id="blindLabel">BLIND VIEW (the bell lights up what is near)</div>
     <div id="bstage"><canvas id="blind" width="320" height="240"></canvas></div>
     <div id="hud"></div>
+    <div id="kbar"><button id="kP1">👁 ARCHER</button><button id="kP2">👁 THIEF</button><button id="kLook">⌖ LOOK AHEAD</button><button id="kSnd">♪ BELL SOUND</button></div>
     <div id="legend">
       <b>You control ONE person.</b> <kbd>1</kbd> king <kbd>2</kbd> archer <kbd>3</kbd> thief (or <kbd>Tab</kbd>). <kbd>T</kbd> teammates follow the king on/off.<br>
       <b>King:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move relative to where you look, <kbd>Mouse</kbd> look (click view, <kbd>Esc</kbd> frees), <kbd>Q</kbd>/<kbd>E</kbd> bell left/right, <kbd>B</kbd> bell sound, <kbd>C</kbd> look ahead<br>
@@ -1720,6 +1746,33 @@ function renderLobby(){
     S.players.forEach(q=>{q.human=HUMANS.has(q.id);});
   }
 }
+
+/* ===== king on a phone: drag the view to look, buttons to walk and ring the bell ===== */
+function kingTouchInit(){
+  document.body.classList.add('kingtouch','touch');
+  setTimeout(vcLabel,0);
+  bindHold('kF','w');bindHold('kB','s');bindHold('kL','a');bindHold('kR','d');
+  bindTap('kBL',()=>{if(S.state==='play'&&!CUT)bell('L');});
+  bindTap('kBR',()=>{if(S.state==='play'&&!CUT)bell('R');});
+  bindTap('kP1',()=>{S.bi=1;});bindTap('kP2',()=>{S.bi=2;});
+  bindTap('kLook',()=>{S.gaze=Math.atan2(S.players[0].dir.y,S.players[0].dir.x);});
+  bindTap('kSnd',()=>{bellIdx=(bellIdx+1)%BELLS.length;playBell('R');});
+  let lx=null;
+  const c=$('leader');
+  c.addEventListener('pointerdown',e=>{if(e.pointerType==='touch'||e.pointerType==='pen'){lx=e.clientX;try{c.setPointerCapture(e.pointerId);}catch(_){}}});
+  c.addEventListener('pointermove',e=>{
+    if(lx===null||!S)return;
+    S.gaze+=(e.clientX-lx)*0.009;lx=e.clientX;
+    while(S.gaze>Math.PI)S.gaze-=2*Math.PI;while(S.gaze<-Math.PI)S.gaze+=2*Math.PI;
+  });
+  ['pointerup','pointercancel'].forEach(ev=>c.addEventListener(ev,()=>{lx=null;}));
+  $('msg').addEventListener('pointerdown',()=>{
+    if(S.state==='win'&&lvl<LEVELS.length-1)nextLevel();
+    else if(S.state==='win')loadLevel(0);
+    else if(S.state==='lose')loadLevel(lvl);
+  });
+  try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{});}catch(e){}
+}
 function startNet(m){
   const me=m.players.find(p=>p.id===NET.id);
   if(!me)return;
@@ -1728,9 +1781,11 @@ function startNet(m){
   HUMANS=new Set(m.players.map(p=>p.role).filter(r=>r!=='king'));
   $('lobby').style.display='none';
   started=true;audio();
+  if(MODE==='king'&&(('ontouchstart' in window)||navigator.maxTouchPoints>0))kingTouchInit();
   if(MODE==='blind'){
+    try{navigator.wakeLock&&navigator.wakeLock.request('screen').catch(()=>{});}catch(e){}
     document.body.classList.add('blindmode');$('bstage').appendChild($('msg'));
-    if(('ontouchstart' in window)||navigator.maxTouchPoints>0){document.body.classList.add('touch');$('touch').style.display='flex';$('tA').textContent=NET.myRole==='archer'?'SHOOT':'PICK';}
+    if(('ontouchstart' in window)||navigator.maxTouchPoints>0){document.body.classList.add('touch');$('touch').style.display='flex';setTimeout(vcLabel,0);$('tA').textContent=NET.myRole==='archer'?'SHOOT':'PICK';}
   }
   $('legend').innerHTML=MODE==='king'
     ?'<b>You are the KING.</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move relative to where you look, <kbd>Mouse</kbd> look (click view, <kbd>Esc</kbd> frees), <kbd>Q</kbd>/<kbd>E</kbd> bell left/right, <kbd>B</kbd> bell sound, <kbd>C</kbd> look ahead.<br><kbd>2</kbd><kbd>3</kbd> peek through a teammate\'s blind view. <kbd>R</kbd> restart, <kbd>Enter</kbd> next level. Win: you at the exit with everyone alive within 4 tiles.'
@@ -1746,6 +1801,8 @@ function vcLabel(){
   const b=$('vcBtn');b.style.display='block';
   const n=Object.keys(VC.pcs).filter(k=>VC.pcs[k].connectionState==='connected').length;
   b.className=VC.stream?(VC.muted?'off':''):'off';
+  const sh=document.body.classList.contains('touch');
+  if(sh){b.textContent=!VC.stream?'🎤 NO MIC':VC.muted?'🔇 MUTED':'🎤 LIVE';return;}
   b.textContent=!VC.stream?'🎤 NO MIC (listen only) · '+n+' linked':VC.muted?'🔇 MUTED · M to talk · '+n+' linked':'🎤 LIVE · M to mute · '+n+' linked';
 }
 async function vcStart(){
