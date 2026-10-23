@@ -39,65 +39,26 @@ kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--la
     </div>
   </div>
   <div class="panel">
-    <div class="label">BLIND VIEW (the bell lights up what is near)</div>
+    <div class="label" id="blindLabel">BLIND VIEW (the bell lights up what is near)</div>
     <canvas id="blind" width="320" height="240"></canvas>
     <div id="hud"></div>
     <div id="legend">
-      <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move relative to where the king looks &nbsp; <kbd>Arrows</kbd> fixed compass directions<br><kbd>Q</kbd> bell left &nbsp; <kbd>E</kbd> bell right<br>
-      <kbd>Space</kbd> shoot &nbsp; <kbd>F</kbd> door &nbsp; <kbd>B</kbd> change bell sound<br><kbd>R</kbd> restart &nbsp; <i>no map: the king only sees what is in front of him</i><br><kbd>Mouse</kbd> king looks around (click the view, <kbd>Esc</kbd> frees it) &nbsp; <kbd>C</kbd> look where the party faces<br>
-      Use headphones. Left bell = left ear.
+      <b>You control ONE person.</b> <kbd>1</kbd> king <kbd>2</kbd> scout <kbd>3</kbd> gunner <kbd>4</kbd> door-op (or <kbd>Tab</kbd>). <kbd>T</kbd> teammates follow the king on/off.<br>
+      <b>King:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move relative to where you look, <kbd>Mouse</kbd> look (click view, <kbd>Esc</kbd> frees), <kbd>Q</kbd>/<kbd>E</kbd> bell left/right, <kbd>B</kbd> bell sound, <kbd>C</kbd> look ahead<br>
+      <b>Blind:</b> <kbd>W</kbd>/<kbd>S</kbd> forward/back, <kbd>A</kbd>/<kbd>D</kbd> turn. <b>Gunner:</b> <kbd>Space</kbd> shoot (the bullet hits friends too). <b>Door-op:</b> <kbd>F</kbd> door.<br>
+      Win: king at the exit with everyone alive within 4 tiles. <kbd>R</kbd> restart. Headphones: left bell = left ear.
     </div>
   </div>
 </div>
 
 <script>
 /* ===================== LEVELS ===================== */
-/* # wall  . floor  S start  E exit  D door (starts closed)  G ghost */
+/* mazes are generated from a fixed seed (same maze every run). # wall  . floor  S start  E exit  D door (starts closed)  G ghost */
 const LEVELS=[
- {name:'First Toll',ammo:0,map:[
-  "#############",
-  "#S..#.......#",
-  "#.#.#.#####.#",
-  "#.#...#..G#.#",
-  "#.#####.#.#.#",
-  "#.......#...#",
-  "#.#####.###.#",
-  "#.#...#.....E",
-  "#############"]},
- {name:'The Door Room',ammo:2,map:[
-  "###############",
-  "#S....#.......#",
-  "#.###.#.#####.#",
-  "#.#...#.#...#.#",
-  "#.#.###.#.#.#.#",
-  "#.#..G..#.#...#",
-  "#.#######.#####",
-  "#.........D...E",
-  "###############"]},
- {name:'Dead Ends',ammo:3,stalk:true,map:[
-  "###############",
-  "#S..#.....#...#",
-  "#...#.###.#.#.#",
-  "#.###.#...#.#.#",
-  "#.....#.###.#.#",
-  "#.#####.....#.#",
-  "#......G###.#D#",
-  "#######.#...#.#",
-  "#.......#.###.#",
-  "#.#######.....E",
-  "###############"]},
- {name:'Wake the Dead',ammo:4,stalk:true,map:[
-  "###############",
-  "#S.....#.....E#",
-  "#.####.#.###.##",
-  "#.#..#.#.G.#..#",
-  "#.#.##.###.##.#",
-  "#.#..#.....#..#",
-  "#.##.#######.##",
-  "#....D.....DG.#",
-  "#.##########.##",
-  "#G............#",
-  "###############"]}
+ {name:'First Toll',ammo:3,gen:{w:21,h:13,seed:11,ghosts:1,doors:0,braid:0.05}},
+ {name:'The Door Room',ammo:4,gen:{w:27,h:17,seed:23,ghosts:2,doors:2,braid:0.05}},
+ {name:'Dead Ends',ammo:5,stalk:true,gen:{w:33,h:21,seed:37,ghosts:4,doors:3,braid:0.04}},
+ {name:'Wake the Dead',ammo:6,stalk:true,gen:{w:41,h:25,seed:53,ghosts:6,doors:4,braid:0.04}}
 ];
 /* ===================== END LEVELS ===================== */
 
@@ -166,23 +127,83 @@ const sfx={
   win:()=>{[523,659,784,1047].forEach((f,i)=>setTimeout(()=>tone('triangle',f,f,0.3,0.3,0),i*120));},
   lose:()=>{tone('sawtooth',200,40,1.0,0.5,0);},
   scream:()=>{noise(0.9,0.9,0);tone('sawtooth',880,260,0.9,0.5,0);tone('sawtooth',931,240,0.9,0.4,0);tone('square',120,60,0.9,0.4,0);},
+  chomp:()=>{ /* deliberately LOUD */
+    noise(0.9,1.8,0);tone('sine',110,24,1.1,2.0,0);
+    tone('sawtooth',300,1800,0.5,1.3,0,{type:'lowpass',f:6000});tone('sawtooth',322,1500,0.5,1.1,0);
+    tone('square',90,40,0.9,1.1,0);tone('sawtooth',880,260,0.9,0.9,0);
+    setTimeout(()=>{noise(0.14,1.8,0);tone('square',200,60,0.25,1.6,0);},420);
+    setTimeout(()=>{noise(0.14,1.8,0);tone('square',160,50,0.25,1.6,0);},580);
+    setTimeout(()=>{noise(0.6,1.2,0);tone('sawtooth',700,110,0.9,1.0,0);},720);
+  },
   blackout:()=>{tone('sine',52,28,0.6,0.7,0);noise(0.12,0.25,0);}
 };
 
 /* ===================== LOGIC ===================== */
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+/* recursive-backtracker maze + a few loops, exit at the far end, closed doors spread along the solution, ghosts far from the start */
+function genMaze(o){
+  const w=o.w,h=o.h,rnd=mulberry(o.seed),g=[];
+  for(let y=0;y<h;y++)g.push(new Array(w).fill('#'));
+  const st=[[1,1]];g[1][1]='.';
+  while(st.length){
+    const [x,y]=st[st.length-1],nb=[];
+    for(const [dx,dy] of [[2,0],[-2,0],[0,2],[0,-2]]){const nx=x+dx,ny=y+dy;if(nx>0&&ny>0&&nx<w-1&&ny<h-1&&g[ny][nx]==='#')nb.push([dx,dy]);}
+    if(!nb.length){st.pop();continue;}
+    const [dx,dy]=nb[Math.floor(rnd()*nb.length)];
+    g[y+dy/2][x+dx/2]='.';g[y+dy][x+dx]='.';st.push([x+dx,y+dy]);
+  }
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+    if(g[y][x]!=='#')continue;
+    const hz=x%2===0&&y%2===1&&g[y][x-1]==='.'&&g[y][x+1]==='.',vt=x%2===1&&y%2===0&&g[y-1][x]==='.'&&g[y+1][x]==='.';
+    if((hz||vt)&&rnd()<o.braid)g[y][x]='.';
+  }
+  const d=Array.from({length:h},()=>new Array(w).fill(-1)),par={},q=[[1,1]];d[1][1]=0;
+  for(let i=0;i<q.length;i++){const [x,y]=q[i];
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy;
+      if(g[ny][nx]!=='#'&&d[ny][nx]<0){d[ny][nx]=d[y][x]+1;par[nx+','+ny]=[x,y];q.push([nx,ny]);}}}
+  const ex=q[q.length-1],path=[];
+  for(let c=ex;c;c=par[c[0]+','+c[1]])path.unshift(c);
+  const isCorr=(x,y)=>g[y][x]==='.'&&((g[y-1][x]==='#'&&g[y+1][x]==='#'&&g[y][x-1]!=='#'&&g[y][x+1]!=='#')||(g[y][x-1]==='#'&&g[y][x+1]==='#'&&g[y-1][x]!=='#'&&g[y+1][x]!=='#'));
+  for(let k=1;k<=o.doors;k++){
+    const base=Math.floor(path.length*k/(o.doors+1));
+    for(let off=0;off<12;off++){
+      let done=false;
+      for(const sg of [1,-1]){const i=base+sg*off,c=path[i];
+        if(c&&d[c[1]][c[0]]>=4&&(c[0]!==ex[0]||c[1]!==ex[1])&&isCorr(c[0],c[1])){g[c[1]][c[0]]='D';done=true;break;}}
+      if(done)break;
+    }
+  }
+  const cand=[];
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++)if(g[y][x]==='.'&&d[y][x]>=10&&(x!==ex[0]||y!==ex[1]))cand.push([x,y]);
+  for(let i=cand.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[cand[i],cand[j]]=[cand[j],cand[i]];}
+  const gh=[];
+  for(const c of cand){if(gh.length>=o.ghosts)break;if(gh.every(o2=>Math.abs(o2[0]-c[0])+Math.abs(o2[1]-c[1])>=7))gh.push(c);}
+  gh.forEach(c=>{g[c[1]][c[0]]='G';});
+  g[1][1]='S';g[ex[1]][ex[0]]='E';
+  return g.map(r=>r.join(''));
+}
+let assist=true;  /* teammates you are not driving tag along behind the king (stand-ins for real people) */
 function loadLevel(n){
   lvl=n;
-  const L=LEVELS[n],grid=L.map.map(r=>r.split('')),h=grid.length,w=grid[0].length;
-  const party={x:1,y:1,dir:{x:1,y:0}},ghosts=[];let exit={x:1,y:1};
+  const L=LEVELS[n];
+  if(!L.map)L.map=genMaze(L.gen);
+  const grid=L.map.map(r=>r.split('')),h=grid.length,w=grid[0].length;
+  const ghosts=[];let exit={x:1,y:1},sx=1,sy=1;
   for(let y=0;y<h;y++)for(let x=0;x<w;x++){
     const c=grid[y][x];
-    if(c==='S'){party.x=x;party.y=y;grid[y][x]='.';}
+    if(c==='S'){sx=x;sy=y;grid[y][x]='.';}
     if(c==='E')exit={x,y};
     if(c==='G'){ghosts.push({x,y,next:now()+1,alert:0,id:ghosts.length});grid[y][x]='.';}
   }
-  S={grid,w,h,party,ghosts,doorOpen:{},pings:[],puffs:[],ammo:L.ammo,health:3,
-     state:'play',lastMove:0,lastBell:0,hurtUntil:0,shake:0,name:L.name,
-     exit,shotT:-9,tracer:null,gaze:0,dread:0,lastT:now(),beatT:-9,nextBeat:0,nextWhisper:0,nextAmb:now()+6,nextBlackout:now()+12,blackoutUntil:0,scareT:-9,msgAt:0,view:{x:party.x+0.5,y:party.y+0.5,a:0}};
+  let d0={x:1,y:0};
+  for(const [dx,dy] of [[1,0],[0,1],[-1,0],[0,-1]])if(grid[sy+dy]&&grid[sy+dy][sx+dx]&&grid[sy+dy][sx+dx]!=='#'){d0={x:dx,y:dy};break;}
+  const mk=(id,role,name)=>({id,role,name,x:sx,y:sy,dir:{x:d0.x,y:d0.y},hp:3,dead:false,how:'',stunUntil:0,hurtUntil:0,lastMove:0,botNext:now()+0.8,lost:false,
+    view:{x:sx+0.5,y:sy+0.5,a:Math.atan2(d0.y,d0.x)}});
+  const players=[mk('king','leader','KING'),mk('scout','driver','SCOUT'),mk('gunner','gunner','GUNNER'),mk('doorop','doorop','DOOR-OP')];
+  S={grid,w,h,players,party:players[0],act:0,bi:2,ghosts,doorOpen:{},pings:[],puffs:[],ammo:L.ammo,
+     state:'play',lastBell:0,shake:0,name:L.name,
+     exit,shotT:-9,shotBy:'',tracer:null,gaze:Math.atan2(d0.y,d0.x),dread:0,lastT:now(),beatT:-9,nextBeat:0,nextWhisper:0,nextAmb:now()+6,
+     nextBlackout:now()+12,blackoutUntil:0,scare:null,msgAt:0,note:null,waiting:[],view:players[0].view};
   hideMsg();
 }
 function inb(x,y){return y>=0&&y<S.h&&x>=0&&x<S.w;}
@@ -194,34 +215,41 @@ function passable(x,y){
   return true;
 }
 function ghostAt(x,y){return S.ghosts.find(g=>g.x===x&&g.y===y);}
-function tryMove(dx,dy){
-  S.party.dir={x:dx,y:dy};
-  const nx=S.party.x+dx,ny=S.party.y+dy;
-  if(passable(nx,ny)){
-    S.party.x=nx;S.party.y=ny;
-    if(S.grid[ny][nx]==='E')win();
-  }
+/* every person is their own body: own tile, facing, health, view */
+function canAct(p,t){return !p.dead&&t>=p.stunUntil;}
+function step(p,dx,dy,face){
+  if(!canAct(p,now()))return false;
+  if(face!==false)p.dir={x:dx,y:dy};
+  const nx=p.x+dx,ny=p.y+dy;
+  if(!passable(nx,ny))return false;
+  p.x=nx;p.y=ny;return true;
+}
+function turn(p,k){
+  if(!canAct(p,now()))return;
+  const d=p.dir;p.dir=k>0?{x:-d.y,y:d.x}:{x:d.y,y:-d.x};
 }
 function bell(side){
-  const t=now();
+  const t=now(),K=S.players[0];
+  if(K.dead||t<K.stunUntil)return;
   if(t-S.lastBell<0.35)return;
   S.lastBell=t;
   playBell(side);
-  S.pings.push({t,side,x:S.party.x,y:S.party.y});
+  S.pings.push({t,side,x:K.x,y:K.y});
   /* the bell is noise: nearby ghosts get curious */
   S.ghosts.forEach(g=>{
-    if(Math.abs(g.x-S.party.x)+Math.abs(g.y-S.party.y)<=8)g.alert=t+2.5;
+    if(Math.abs(g.x-K.x)+Math.abs(g.y-K.y)<=8)g.alert=t+2.5;
   });
 }
+/* only the gunner shoots, and the bullet hits the first thing in the line: ghost OR teammate */
 function shoot(){
-  if(S.ammo<=0){sfx.click();return;}
+  const p=S.players[S.act],t=now();
+  if(p.role!=='gunner'||!canAct(p,t)||S.ammo<=0){sfx.click();return;}
   S.ammo--;sfx.shot();
-  const t=now();
-  S.shotT=t;
+  S.shotT=t;S.shotBy=p.id;
   S.ghosts.forEach(g=>{g.alert=t+3;});/* gunshots are loud */
-  let x=S.party.x,y=S.party.y,lx=x,ly=y;
-  const d=S.party.dir;
-  for(let i=0;i<12;i++){
+  let x=p.x,y=p.y,lx=x,ly=y;
+  const d=p.dir;
+  for(let i=0;i<14;i++){
     x+=d.x;y+=d.y;
     if(!passable(x,y))break;
     lx=x;ly=y;
@@ -232,11 +260,45 @@ function shoot(){
       sfx.kill();
       break;
     }
+    const v=S.players.find(q=>q!==p&&!q.dead&&q.x===x&&q.y===y);
+    if(v){friendlyFire(v,t);break;}
   }
-  S.tracer={x0:S.party.x,y0:S.party.y,x1:lx,y1:ly,t};
+  S.tracer={x0:p.x,y0:p.y,x1:lx,y1:ly,t};
+}
+/* shot a friend: they are hurt and blinded for a while, and the bang calls every ghost nearby */
+function friendlyFire(v,t){
+  v.hp--;v.hurtUntil=t+1.3;v.stunUntil=t+2.5;
+  sfx.hurt();
+  S.ghosts.forEach(g=>{if(Math.abs(g.x-v.x)+Math.abs(g.y-v.y)<=14)g.alert=t+6;});
+  S.note={t,text:'FRIENDLY FIRE: '+v.name+' is hit and blinded!'};
+  if(v===S.players[0])S.shake=t+0.3;
+  if(v.hp<=0)killPlayer(v,t,'shot');
+}
+function hurtPlayer(p,t){
+  p.hp--;p.hurtUntil=t+1.3;p.stunUntil=Math.max(p.stunUntil,t+0.4);
+  if(p===S.players[0])S.shake=t+0.3;
+  sfx.hurt();
+  S.note={t,text:p.name+' was clawed!'};
+  if(p.hp<=0)killPlayer(p,t,'eaten');
+}
+function killPlayer(p,t,how){
+  p.dead=true;p.how=how;p.hp=0;
+  if(how==='eaten'){S.scare={t,victim:p.id,name:p.name};sfx.chomp();}
+  else sfx.scream();
+  S.note={t,text:p.name+(how==='eaten'?' was eaten!':' went down!')};
+  const alive=S.players.filter(q=>!q.dead&&q.id!=='king');
+  if(p.id==='king')gameOver(p.name+' was eaten. Without the king, the blind are lost.');
+  else if(!alive.length)gameOver('Every blind teammate is down.');
+  else if(S.players[S.act].dead){S.act=0;}
+  if(S.players[S.bi].dead){const nb=S.players.findIndex((q,i)=>i>0&&!q.dead);if(nb>0)S.bi=nb;}
+}
+function gameOver(why){
+  S.state='lose';S.loseWhy=why;S.msgAt=now()+(S.scare?1.8:0.4);
+  sfx.lose();
 }
 function toggleDoor(){
-  const p=S.party;
+  const p=S.players[S.act];
+  if(p.role!=='doorop'||!canAct(p,now())){sfx.click();return;}
   for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
     const x=p.x+dx,y=p.y+dy;
     if(inb(x,y)&&S.grid[y][x]==='D'){
@@ -268,9 +330,29 @@ function bfsNext(from,to){
   }
   return null;
 }
+
+/* a teammate you are not driving follows the king, but slowly: outrun them and they lose you */
+function botStep(p,t){
+  if(t<p.botNext)return;
+  p.botNext=t+(p.role==='driver'?0.42:0.62);
+  const K=S.players[0];
+  if(K.dead)return;
+  const dist=Math.abs(p.x-K.x)+Math.abs(p.y-K.y);
+  p.lost=dist>14;
+  if(dist<=2||p.lost)return;
+  const mv=bfsNext(p,K);
+  if(mv){p.dir={x:mv.x-p.x,y:mv.y-p.y};p.x=mv.x;p.y=mv.y;}
+}
+function nearestPlayer(g){
+  let b=null,bd=1e9;
+  for(const p of S.players){if(p.dead)continue;const d=Math.abs(g.x-p.x)+Math.abs(g.y-p.y);if(d<bd){bd=d;b=p;}}
+  return b?{p:b,d:bd}:null;
+}
 function ghostStep(g,t){
-  const p=S.party,d=Math.abs(g.x-p.x)+Math.abs(g.y-p.y);
-  const chase=t<g.alert||d<=4;
+  const np=nearestPlayer(g);
+  if(!np)return;
+  const p=np.p,d=np.d;
+  const chase=t<g.alert||d<=5;
   let mv=null;
   if(chase)mv=bfsNext(g,p);
   if(!mv){
@@ -279,14 +361,15 @@ function ghostStep(g,t){
       if(passable(g.x+dx,g.y+dy)&&!ghostAt(g.x+dx,g.y+dy)){mv={x:g.x+dx,y:g.y+dy};break;}
     }
   }
-  if(mv&&!(ghostAt(mv.x,mv.y)&&(mv.x!==p.x||mv.y!==p.y))){g.x=mv.x;g.y=mv.y;}
+  if(mv&&!ghostAt(mv.x,mv.y)){g.x=mv.x;g.y=mv.y;}
   /* spatial footsteps: you hear them before you see them */
-  const nd=Math.abs(g.x-p.x)+Math.abs(g.y-p.y);
+  const L=listener(),nd=Math.abs(g.x-L.x)+Math.abs(g.y-L.y);
   if(nd<=7)tone('sine',95,70,0.14,0.28*(1-nd/8),bearingPan(g));
 }
 /* ===================== HORROR ===================== */
-/* pan = which ear: bearing of the ghost relative to where the party faces (clockwise = right) */
-function bearingPan(g){return Math.sin(Math.atan2(g.y-S.party.y,g.x-S.party.x)-S.view.a);}
+/* pan = which ear: bearing of the ghost relative to where the person you control is facing (clockwise = right) */
+function listener(){const L=S.players[S.act];return L.dead?(S.players.find(p=>!p.dead)||L):L;}
+function bearingPan(g){const L=listener();return Math.sin(Math.atan2(g.y-L.y,g.x-L.x)-L.view.a);}
 function setParam(prm,v){if(prm.setTargetAtTime)prm.setTargetAtTime(v,AC.currentTime,0.25);else prm.value=v;}
 let drone=null;
 function ensureAmbient(){
@@ -366,23 +449,31 @@ function update(t){
   const dt=Math.min(0.1,Math.max(0.001,t-S.lastT));S.lastT=t;
   const stalk=!!LEVELS[lvl].stalk;
   const interval=Math.max(0.35,0.62-lvl*0.05)*(stalk?0.8:1);
+  if(assist)for(let i=1;i<S.players.length;i++){const q=S.players[i];if(i!==S.act&&canAct(q,t))botStep(q,t);}
+  const L=listener();
   let nearest=null,nd=99;
   for(const g of S.ghosts){
     const seen=seenByKing(g);
     g.frozen=seen;
     if(seen)g.next=Math.max(g.next,t+0.15);
     else if(t>=g.next){g.next=t+interval*(t<g.alert?0.8:1.15);ghostStep(g,t);}
-    if(g.x===S.party.x&&g.y===S.party.y&&t>S.hurtUntil){
-      S.health--;S.hurtUntil=t+1.3;S.shake=t+0.3;sfx.hurt();
-      if(S.health<=0){lose();return;}
+    for(const q of S.players){
+      if(!q.dead&&q.x===g.x&&q.y===g.y&&t>q.hurtUntil){hurtPlayer(q,t);if(S.state!=='play')return;}
     }
-    const d=Math.hypot(g.x-S.party.x,g.y-S.party.y);
+    const d=Math.hypot(g.x-L.x,g.y-L.y);
     if(d<nd){nd=d;nearest=g;}
   }
   S.pings=S.pings.filter(p=>t-p.t<1.5);
   S.puffs=S.puffs.filter(p=>t-p.t<0.6);
+  /* win: the king at the exit AND nobody left behind (everyone alive within 4 tiles) */
+  const K=S.players[0];
+  S.waiting=[];
+  if(!K.dead&&S.grid[K.y][K.x]==='E'){
+    S.waiting=S.players.filter(q=>!q.dead&&q!==K&&Math.hypot(q.x-K.x,q.y-K.y)>4).map(q=>q.name);
+    if(!S.waiting.length){win();return;}
+  }
 
-  /* dread: how close the nearest ghost is, smoothed. Drives sound, light and screen effects. */
+  /* dread: how close the nearest ghost is to the person you control, smoothed. Drives sound, light and screen effects. */
   const target=nearest?Math.max(0,Math.min(1,1-nd/8)):0;
   S.dread+=(target-S.dread)*(1-Math.exp(-dt*4));
   ensureAmbient();
@@ -400,26 +491,48 @@ function update(t){
     sfx.blackout();
   }
 }
-function lose(){
-  S.state='lose';S.scareT=now();S.msgAt=now()+1.15;
-  sfx.scream();sfx.lose();
-}
-/* jump scare: a huge ghost fills the screen for a second before the CAUGHT card */
+/* JUMP SCARE: the monster lunges out of the dark, jaws open, and bites down (twice) */
 function drawScare(ctx,CW,CH,t){
-  if(S.state!=='lose'||t-S.scareT>1.1)return;
-  const k=(t-S.scareT)/1.1,al=k<0.75?1:1-(k-0.75)/0.25;
-  ctx.save();
-  ctx.fillStyle='rgba(120,0,0,'+(0.55*al)+')';ctx.fillRect(0,0,CW,CH);
-  const size=CH*(0.95+0.3*Math.min(1,k*3));
-  ctx.imageSmoothingEnabled=false;ctx.globalAlpha=al;
-  ctx.drawImage(monSprite('a',0,Math.floor(k*14)%MON_FRAMES),CW/2-size/2+(Math.random()-0.5)*16,CH*0.5-size*0.55+(Math.random()-0.5)*16,size,size);
-  ctx.globalAlpha=1;
-  ctx.fillStyle='rgba(255,255,255,0.18)';
-  for(let i=0;i<300;i++)ctx.fillRect(Math.random()*CW,Math.random()*CH,2,2);
+  const sc=S.scare;
+  if(!sc)return;
+  const e=t-sc.t,D=1.7;
+  if(e<0||e>D)return;
+  ctx.save();ctx.imageSmoothingEnabled=false;
+  if(e<0.5){
+    const k=e/0.5,z=k*k,size=CH*(0.1+1.55*z),sx=(Math.random()-0.5)*22*k,sy=(Math.random()-0.5)*22*k;
+    ctx.fillStyle='rgba(40,0,0,'+(0.45+0.45*k)+')';ctx.fillRect(0,0,CW,CH);
+    ctx.drawImage(monSprite('a',0,Math.floor(e*30)%MON_FRAMES),CW/2-size/2+sx,CH*0.52-size/2+sy,size,size);
+  }else if(e<1.2){
+    let f;
+    if(e<0.85)f=1-Math.pow((e-0.5)/0.35,2);else if(e<0.95)f=0.3*(e-0.85)/0.1;else f=0.3*(1-Math.min(1,(e-0.95)/0.12));
+    const gap=CH*0.5*Math.max(0,f),jx=(Math.random()-0.5)*8,jy=(Math.random()-0.5)*8;
+    const g=ctx.createRadialGradient(CW/2,CH/2,10,CW/2,CH/2,CW*0.65);g.addColorStop(0,'#6a0000');g.addColorStop(1,'#050000');
+    ctx.fillStyle=g;ctx.fillRect(0,0,CW,CH);
+    const n=12,tw=CW/n,th=CH*0.16,gum=CH*0.08;
+    for(const sd of [-1,1]){
+      const edge=CH/2+sd*gap+jy;
+      ctx.fillStyle='#7a1818';
+      if(sd<0)ctx.fillRect(0,0,CW,edge-0);else ctx.fillRect(0,edge,CW,CH-edge);
+      ctx.fillStyle='#a03030';
+      if(sd<0)ctx.fillRect(0,edge-gum,CW,gum);else ctx.fillRect(0,edge,CW,gum);
+      ctx.fillStyle='#ece4d0';
+      for(let i=0;i<n;i++){
+        const x=i*tw+jx,hh=th*(i%2?0.8:1.1);
+        ctx.beginPath();
+        if(sd<0){ctx.moveTo(x,edge);ctx.lineTo(x+tw,edge);ctx.lineTo(x+tw/2,edge+hh);}
+        else{ctx.moveTo(x,edge);ctx.lineTo(x+tw,edge);ctx.lineTo(x+tw/2,edge-hh);}
+        ctx.closePath();ctx.fill();
+      }
+    }
+  }else{
+    const k=(e-1.2)/(D-1.2);
+    ctx.fillStyle='rgba(0,0,0,'+Math.min(1,0.55+k*0.6)+')';ctx.fillRect(0,0,CW,CH);
+    ctx.fillStyle='rgba(160,0,0,'+(0.5*(1-k)*(0.6+0.4*Math.random()))+')';ctx.fillRect(0,0,CW,CH);
+  }
   ctx.restore();
 }
 function win(){
-  S.state='win';sfx.win();
+  S.state='win';S.note=null;sfx.win();
   if(lvl>=LEVELS.length-1)showMsg('ALL CLEAR','You rang your way out of every maze.<div class="small">Press <kbd>R</kbd> to replay from level 1</div>',true);
   else showMsg('ESCAPED','Level '+(lvl+1)+' clear<div class="small">Press <kbd>Enter</kbd> for the next level</div>');
 }
@@ -648,6 +761,8 @@ function ghostCanvas(it,t){
   const frame=it.frozen?0:Math.floor(t*(it.moving?10:2.5)+it.id*3)%MON_FRAMES;
   return monSprite(it.frozen?'f':it.alert?'a':'n',view,frame);
 }
+const roleCv={};
+function roleCanv(r){return roleCv[r]||(roleCv[r]=sprCanvas(ROLES[r].spr,rolePal(ROLES[r])));}
 const ghostCanv=[sprCanvas(GHOST_A,GP),sprCanvas(GHOST_B,GP)];
 const ghostCanvAlert=[sprCanvas(GHOST_A,GP_ALERT),sprCanvas(GHOST_B,GP_ALERT)];
 const GP_FROZEN={W:'#ffffff',X:'#b8c4d8',x:'#7a869e',O:'#1a1a2e',M:'#1a1a2e'};
@@ -764,7 +879,7 @@ function renderLeader(){
   }
   function drawSquad(){
     const px=ox+P.x*ts,py=oy+P.y*ts,m=ts*0.66;
-    const flash=t<S.hurtUntil&&Math.floor(t*12)%2===0;
+    const flash=t<S.players[0].hurtUntil&&Math.floor(t*12)%2===0;
     if(flash)return;
     const order=[['leader',0,-0.46],['driver',0.34,-0.46],['gunner',0,0.04],['doorop',0.34,0.04]];
     order.forEach(([role,fx,fy],i)=>{
@@ -839,7 +954,7 @@ function renderLeader(){
   const vg=ctx.createRadialGradient(cL.width/2,cL.height/2,cL.height*0.35,cL.width/2,cL.height/2,cL.width*0.75);
   vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.6)');
   ctx.fillStyle=vg;ctx.fillRect(-10,-10,cL.width+20,cL.height+20);
-  if(t<S.hurtUntil){ctx.fillStyle='rgba(255,60,60,'+(0.25*(S.hurtUntil-t)/1.3)+')';ctx.fillRect(-10,-10,cL.width+20,cL.height+20);}
+  if(t<S.players[0].hurtUntil){ctx.fillStyle='rgba(255,60,60,'+(0.25*(S.players[0].hurtUntil-t)/1.3)+')';ctx.fillRect(-10,-10,cL.width+20,cL.height+20);}
   ctx.restore();
 }
 
@@ -968,6 +1083,7 @@ function renderLeaderFP(){
   /* billboards: ghosts + exit light pillar, far to near */
   const items=[];
   S.ghosts.forEach(g=>items.push(ghostItem(g,t)));
+  S.players.forEach((q,i)=>{if(i===0||q.dead)return;items.push({x:q.view.x,y:q.view.y,k:'p',role:q.role,id:i});});
   items.push({x:S.exit.x+0.5,y:S.exit.y+0.5,k:'e',id:0});
   items.forEach(it=>{it.d=(V.x-it.x)*(V.x-it.x)+(V.y-it.y)*(V.y-it.y);});
   items.sort((a,b)=>b.d-a.d);
@@ -977,10 +1093,10 @@ function renderLeaderFP(){
     const tx=invDet*(dirY*dx-dirX*dy),ty=invDet*(-planeY*dx+planeX*dy);
     if(ty<0.15)continue;
     const screenX=Math.floor((W/2)*(1+tx/ty));
-    const size=Math.min(H*3,Math.floor(H/ty*(it.k==='g'?0.95:1.0)));
+    const size=Math.min(H*3,Math.floor(H/ty*(it.k==='g'?0.95:it.k==='p'?0.8:1.0)));
     const bob=it.k==='g'?Math.sin(t*4+it.id)*size*0.04:0;
     const isG=it.k==='g',bw=size,bh=size;
-    const top=Math.floor(isG?half+size/2-bh+bob:half-size/2+bob),x0=Math.floor(screenX-bw/2);
+    const top=Math.floor(isG?half+size/2-bh+bob:it.k==='p'?half+Math.floor(H/ty)/2-bh:half-size/2+bob),x0=Math.floor(screenX-bw/2);
     const vis=Math.min(1,0.4+lightAt(Math.sqrt(it.d))*0.9);
     for(let sx=Math.max(0,x0);sx<Math.min(W,x0+bw);sx++){
       if(ty>=zbuf[sx])continue;
@@ -988,6 +1104,11 @@ function renderLeaderFP(){
         const tex=Math.floor((sx-x0)/bw*MON_SZ);
         fpx.globalAlpha=0.92*vis;
         fpx.drawImage(ghostCanvas(it,t),tex,0,1,MON_SZ,sx,top,1,bh);
+        fpx.globalAlpha=1;
+      }else if(it.k==='p'){
+        const tex=Math.floor((sx-x0)/bw*16);
+        fpx.globalAlpha=0.95*vis;
+        fpx.drawImage(roleCanv(it.role),tex,0,1,16,sx,top,1,bh);
         fpx.globalAlpha=1;
       }else if(Math.abs(sx-screenX)<size*0.2){
         fpx.fillStyle='rgba(255,211,107,'+(0.5*(0.7+0.3*Math.sin(t*3)))+')';
@@ -1042,6 +1163,7 @@ function renderLeaderFP(){
       ctx.fillRect(mx0+x*m,my0+y*m,m-1,m-1);
     }
     S.ghosts.forEach(g=>{if(!vis.has(g.x+','+g.y))return;ctx.fillStyle=g.frozen?'#ffffff':'#8fffd0';ctx.fillRect(mx0+g.x*m+1,my0+g.y*m+1,m-3,m-3);});
+    S.players.forEach((q,i)=>{if(i===0||q.dead||!vis.has(q.x+','+q.y))return;ctx.fillStyle=ROLES[q.role].c;ctx.fillRect(mx0+q.view.x*m-2,my0+q.view.y*m-2,5,5);});
     const pcx=mx0+V.x*m,pcy=my0+V.y*m;
     ctx.strokeStyle='rgba(255,211,107,0.5)';ctx.lineWidth=1;
     for(const da of [-0.58,0.58]){ctx.beginPath();ctx.moveTo(pcx,pcy);ctx.lineTo(pcx+Math.cos(LA+da)*m*2.6,pcy+Math.sin(LA+da)*m*2.6);ctx.stroke();}
@@ -1066,7 +1188,8 @@ function renderLeaderFP(){
   vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba('+Math.round(140*dr*(0.5+pulse))+',0,0,'+(0.55+0.3*dr)+')');
   ctx.fillStyle=vg;ctx.fillRect(0,0,CW,CH);
   if(dr>0.15){ctx.fillStyle='rgba(255,255,255,0.07)';for(let i=0;i<dr*260;i++)ctx.fillRect(Math.random()*CW,Math.random()*CH,2,2);}
-  if(t<S.hurtUntil){ctx.fillStyle='rgba(255,50,50,'+(0.3*(S.hurtUntil-t)/1.3)+')';ctx.fillRect(0,0,CW,CH);}
+  if(t<S.players[0].hurtUntil){ctx.fillStyle='rgba(255,50,50,'+(0.3*(S.players[0].hurtUntil-t)/1.3)+')';ctx.fillRect(0,0,CW,CH);}
+  if(t<S.players[0].stunUntil){ctx.fillStyle='rgba(0,0,0,0.93)';ctx.fillRect(0,0,CW,CH);ctx.fillStyle='#ff8080';ctx.font='bold 28px "Courier New"';ctx.textAlign='center';ctx.fillText('BLINDED',CW/2,CH/2);}
   ctx.fillStyle='rgba(255,211,107,0.4)';
   ctx.fillRect(CW/2-8,CH/2,6,2);ctx.fillRect(CW/2+2,CH/2,6,2);
 }
@@ -1084,16 +1207,19 @@ function revealAlpha(cx,dist,t){
   return Math.max(a,0.16*Math.max(0,1-dist/1.1));
 }
 function updateView(dt){
-  const P=S.party,V=S.view,k=1-Math.exp(-dt*14);
-  V.x+=(P.x+0.5-V.x)*k;V.y+=(P.y+0.5-V.y)*k;
-  const target=Math.atan2(P.dir.y,P.dir.x);
-  let d=target-V.a;
-  while(d>Math.PI)d-=2*Math.PI;
-  while(d<-Math.PI)d+=2*Math.PI;
-  V.a+=d*(1-Math.exp(-dt*12));
+  const k=1-Math.exp(-dt*14);
+  for(const P of S.players){
+    const V=P.view;
+    V.x+=(P.x+0.5-V.x)*k;V.y+=(P.y+0.5-V.y)*k;
+    const target=Math.atan2(P.dir.y,P.dir.x);
+    let d=target-V.a;
+    while(d>Math.PI)d-=2*Math.PI;
+    while(d<-Math.PI)d+=2*Math.PI;
+    V.a+=d*(1-Math.exp(-dt*12));
+  }
 }
 function renderBlind(){
-  const t=now(),W=cB.width,Hh=cB.height,V=S.view,ctx=xB;
+  const t=now(),W=cB.width,Hh=cB.height,bp=S.players[S.bi],V=bp.view,ctx=xB,hasGun=bp.role==='gunner';
   ctx.fillStyle='#000';ctx.fillRect(0,0,W,Hh);
   const fg=ctx.createLinearGradient(0,Hh/2,0,Hh);
   fg.addColorStop(0,'rgba(30,40,70,0.0)');fg.addColorStop(1,'rgba(30,40,70,0.22)');
@@ -1137,6 +1263,7 @@ function renderBlind(){
   /* billboards: ghosts and the exit marker */
   const items=[];
   S.ghosts.forEach(g=>items.push(ghostItem(g,t)));
+  S.players.forEach((q,i)=>{if(i===S.bi||q.dead)return;items.push({x:q.view.x,y:q.view.y,k:'p',role:q.role,id:i});});
   items.push({x:S.exit.x+0.5,y:S.exit.y+0.5,k:'e',id:0});
   items.forEach(it=>{it.d=(V.x-it.x)*(V.x-it.x)+(V.y-it.y)*(V.y-it.y);});
   items.sort((a,b)=>b.d-a.d);
@@ -1146,10 +1273,10 @@ function renderBlind(){
     const tx=invDet*(dirY*dx-dirX*dy),ty=invDet*(-planeY*dx+planeX*dy);
     if(ty<0.15)continue;
     const screenX=Math.floor((W/2)*(1+tx/ty));
-    const size=Math.min(Hh*3,Math.floor(Hh/ty*(it.k==='g'?0.95:1.0)));
+    const size=Math.min(Hh*3,Math.floor(Hh/ty*(it.k==='g'?0.95:it.k==='p'?0.8:1.0)));
     const bob=it.k==='g'?Math.sin(t*4+it.id)*size*0.04:0;
     const isG=it.k==='g',bw=size,bh=size;
-    const top=Math.floor(isG?Hh/2+size/2-bh+bob:Hh/2-size/2+bob),x0=Math.floor(screenX-bw/2);
+    const top=Math.floor(isG?Hh/2+size/2-bh+bob:it.k==='p'?Hh/2+Math.floor(Hh/ty)/2-bh:Hh/2-size/2+bob),x0=Math.floor(screenX-bw/2);
     for(let sx=Math.max(0,x0);sx<Math.min(W,x0+bw);sx++){
       if(ty>=zbuf[sx])continue;
       const a=revealAlpha(2*sx/W-1,Math.sqrt(it.d),t);
@@ -1158,6 +1285,11 @@ function renderBlind(){
         const tex=Math.floor((sx-x0)/bw*MON_SZ);
         ctx.globalAlpha=Math.min(1,a*1.5);
         ctx.drawImage(ghostCanvas(it,t),tex,0,1,MON_SZ,sx,top,1,bh);
+        ctx.globalAlpha=1;
+      }else if(it.k==='p'){
+        const tex=Math.floor((sx-x0)/bw*16);
+        ctx.globalAlpha=Math.min(1,a*1.4);
+        ctx.drawImage(roleCanv(it.role),tex,0,1,16,sx,top,1,bh);
         ctx.globalAlpha=1;
       }else if(Math.abs(sx-screenX)<size*0.22){
         ctx.fillStyle='rgba(255,211,107,'+(a*0.55*(0.7+0.3*Math.sin(t*4)))+')';
@@ -1170,9 +1302,9 @@ function renderBlind(){
   for(let i=0;i<60+Math.floor(S.dread*520);i++)ctx.fillRect(Math.random()*W,Math.random()*Hh,1,1);
   ctx.fillStyle='rgba(255,211,107,0.5)';
   ctx.fillRect(W/2-5,Hh/2,4,1);ctx.fillRect(W/2+2,Hh/2,4,1);ctx.fillRect(W/2,Hh/2-5,1,4);ctx.fillRect(W/2,Hh/2+2,1,4);
-  const rec=Math.max(0,1-(t-S.shotT)/0.12)*10;
+  const rec=S.shotBy===bp.id?Math.max(0,1-(t-S.shotT)/0.12)*10:0;
   const gx=W/2+26,gy=Hh-70+rec;
-  ctx.globalAlpha=0.78;
+  ctx.globalAlpha=hasGun?0.78:0;
   ctx.fillStyle='#232331';ctx.fillRect(gx+10,gy+50,56,30);          /* sleeve */
   ctx.fillStyle='#d9a878';ctx.fillRect(gx+6,gy+30,40,26);            /* hand */
   ctx.fillStyle='#b98558';ctx.fillRect(gx+6,gy+48,40,8);
@@ -1182,7 +1314,7 @@ function renderBlind(){
   ctx.fillStyle='#16161f';ctx.fillRect(gx+22,gy-4,12,12);            /* muzzle */
   ctx.fillStyle='#8a8aa6';ctx.fillRect(gx+26,gy+2,4,3);              /* front sight */
   ctx.globalAlpha=1;
-  if(t-S.shotT<0.1){
+  if(hasGun&&S.shotBy===bp.id&&t-S.shotT<0.1){
     ctx.save();ctx.globalCompositeOperation='lighter';
     const mg=ctx.createRadialGradient(gx+28,gy-4,1,gx+28,gy-4,60);
     mg.addColorStop(0,'rgba(255,240,170,0.9)');mg.addColorStop(1,'rgba(255,160,40,0)');
@@ -1196,20 +1328,33 @@ function renderBlind(){
     rg.addColorStop(0,'rgba(0,0,0,0)');rg.addColorStop(1,'rgba(150,0,0,'+((S.dread-0.4)*0.9*(0.4+pl))+')');
     ctx.fillStyle=rg;ctx.fillRect(0,0,W,Hh);
   }
-  if(t<S.hurtUntil){ctx.fillStyle='rgba(255,40,40,'+(0.45*(S.hurtUntil-t)/1.3)+')';ctx.fillRect(0,0,W,Hh);}
-  if(S.state==='lose'&&t-S.scareT<1.1){
-    ctx.fillStyle='rgba(180,0,0,'+(0.55*(1-(t-S.scareT)/1.1))+')';ctx.fillRect(0,0,W,Hh);
-    ctx.fillStyle='rgba(255,255,255,0.25)';for(let i=0;i<200;i++)ctx.fillRect(Math.random()*W,Math.random()*Hh,2,2);
+  if(t<bp.hurtUntil){ctx.fillStyle='rgba(255,40,40,'+(0.45*(bp.hurtUntil-t)/1.3)+')';ctx.fillRect(0,0,W,Hh);}
+  if(bp.dead||t<bp.stunUntil){
+    ctx.fillStyle='rgba(0,0,0,'+(bp.dead?1:0.96)+')';ctx.fillRect(0,0,W,Hh);
+    ctx.fillStyle=bp.dead?'#888':'#ff8080';ctx.font='bold 20px "Courier New"';ctx.textAlign='center';
+    ctx.fillText(bp.dead?(bp.how==='eaten'?'EATEN':'DOWN'):'STUNNED',W/2,Hh/2);
   }
+  drawScare(xB,W,Hh,t);
 }
 function renderHud(){
-  const hearts='♥'.repeat(Math.max(0,S.health))+'<span style="opacity:.25">'+'♥'.repeat(Math.max(0,3-S.health))+'</span>';
+  const t=now(),hearts=n=>'♥'.repeat(Math.max(0,n))+'<span style="opacity:.25">'+'♥'.repeat(Math.max(0,3-n))+'</span>';
   const ammo='▮'.repeat(S.ammo)+'<span style="opacity:.25">'+'▯'.repeat(Math.max(0,LEVELS[lvl].ammo-S.ammo))+'</span>';
+  const K=S.players[0];
+  const rows=S.players.map((p,i)=>{
+    let st='';
+    if(p.dead)st=' <span style="opacity:.6">'+(p.how==='eaten'?'eaten':'down')+'</span>';
+    else if(t<p.stunUntil)st=' <span style="color:#ff8080">blinded</span>';
+    else if(i>0&&assist&&i!==S.act&&p.lost)st=' <span style="color:#ffb86b">LOST</span>';
+    else if(i>0){const d=Math.round(Math.hypot(p.x-K.x,p.y-K.y));st=' <span style="opacity:.5">'+d+' away</span>';}
+    return (i===S.act?'<b>▶ ':'&nbsp; ')+p.name.padEnd(7,' ').replace(/ /g,'&nbsp;')+(i===S.act?'</b>':'')+' <span class="hp">'+hearts(p.hp)+'</span>'+st;
+  }).join('<br>');
+  const note=S.note&&t-S.note.t<4?'<br><span style="color:#ffb0b0">'+S.note.text+'</span>':'';
+  const wait=S.waiting&&S.waiting.length?'<br><span style="color:#ffd36b">King is at the exit. Waiting for: '+S.waiting.join(', ')+'</span>':'';
   $('hud').innerHTML=
-   '<b>LEVEL '+(lvl+1)+'</b> '+S.name+'<br>'+
-   'HP <span class="hp">'+hearts+'</span> &nbsp; AMMO '+(LEVELS[lvl].ammo?ammo:'none yet')+'<br>'+
-   'BELL SOUND: <b>'+BELLS[bellIdx]+'</b> &nbsp; GHOSTS: '+S.ghosts.length+
-   (LEVELS[lvl].stalk?'<br><span style="color:#ffb0b0">STALKERS: they freeze while the king looks at them</span>':'');
+   '<b>LEVEL '+(lvl+1)+'</b> '+S.name+' &nbsp; '+S.w+'x'+S.h+'<br>'+rows+'<br>'+
+   'AMMO '+(LEVELS[lvl].ammo?ammo:'none')+' &nbsp; BELL: <b>'+BELLS[bellIdx]+'</b> &nbsp; GHOSTS: '+S.ghosts.length+
+   (LEVELS[lvl].stalk?'<br><span style="color:#ffb0b0">STALKERS: they freeze while the king looks at them</span>':'')+note+wait;
+  const lb=$('blindLabel');if(lb)lb.textContent='BLIND VIEW: '+S.players[S.bi].name+(S.act===S.bi?' (you)':'');
 }
 
 /* ===================== INPUT + LOOP ===================== */
@@ -1232,21 +1377,30 @@ function moveTable(){
 }
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
-  if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k))e.preventDefault();
+  if(['arrowup','arrowdown','arrowleft','arrowright',' ','tab'].includes(k))e.preventDefault();
   keys[k]=true;
   if(!started){started=true;audio();hideMsg();return;}
   if(e.repeat)return;
   if(k==='r'){loadLevel(S.state==='win'&&lvl>=LEVELS.length-1?0:lvl);return;}
+  if(k==='t'){assist=!assist;return;}
+  if(S.state==='play'&&(k>='1'&&k<='4'||k==='tab')){
+    let i=k==='tab'?(S.act+1)%4:Number(k)-1;
+    for(let n=0;n<4&&S.players[i].dead;n++)i=(i+1)%4;
+    if(!S.players[i].dead){S.act=i;if(i>0)S.bi=i;}
+    return;
+  }
   if(S.state==='win'&&k==='enter'){nextLevel();return;}
   if(S.state==='lose'&&k==='enter'){loadLevel(lvl);return;}
   if(S.state!=='play')return;
-  if(k==='q')bell('L');
-  else if(k==='e')bell('R');
+  if(S.act>0&&(k==='a'||k==='arrowleft'))turn(S.players[S.act],-1);
+  else if(S.act>0&&(k==='d'||k==='arrowright'))turn(S.players[S.act],1);
+  else if(k==='q'&&S.act===0)bell('L');
+  else if(k==='e'&&S.act===0)bell('R');
   else if(k===' ')shoot();
   else if(k==='f')toggleDoor();
   else if(k==='b'){bellIdx=(bellIdx+1)%BELLS.length;playBell('R');}
   else if(k==='v'&&DEBUG){leaderMode=leaderMode==='fp'?'map':'fp';}
-  else if(k==='c'){S.gaze=Math.atan2(S.party.dir.y,S.party.dir.x);}
+  else if(k==='c'){S.gaze=Math.atan2(S.players[0].dir.y,S.players[0].dir.x);}
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
@@ -1272,16 +1426,20 @@ addEventListener('mousemove',e=>{
 let lastFrame=now();
 function frame(){
   const t=now(),dt=Math.min(0.1,Math.max(0.001,t-lastFrame));lastFrame=t;
-  if(S.state==='play'&&started&&t-S.lastMove>0.14){
-    for(const [k,dx,dy] of moveTable()){
-      if(keys[k]){tryMove(dx,dy);S.lastMove=t;break;}
-    }
+  const ap=S.players[S.act];
+  if(S.state==='play'&&started&&canAct(ap,t)&&t-ap.lastMove>(ap.role==='leader'?0.14:ap.role==='driver'?0.13:0.2)){
+    if(S.act===0){
+      for(const [k,dx,dy] of moveTable()){
+        if(keys[k]){step(ap,dx,dy);ap.lastMove=t;break;}
+      }
+    }else if(keys['w']||keys['arrowup']){step(ap,ap.dir.x,ap.dir.y,false);ap.lastMove=t;}
+    else if(keys['s']||keys['arrowdown']){step(ap,-ap.dir.x,-ap.dir.y,false);ap.lastMove=t;}
   }
   if(started)update(t);
   if(S.state!=='play'&&drone)setParam(drone.g.gain,0.0);
   if(S.state==='lose'&&S.msgAt&&t>S.msgAt){
     S.msgAt=0;
-    showMsg('CAUGHT','The ghosts found you.<div class="small">Press <kbd>R</kbd> to retry</div>');
+    showMsg('CAUGHT',(S.loseWhy||'The ghosts found you.')+'<div class="small">Press <kbd>R</kbd> to retry</div>');
   }
   updateView(dt);
   renderLeaderView();renderBlind();renderHud();
@@ -1290,7 +1448,7 @@ function frame(){
 loadLevel(0);
 showMsg('RING RING RUN',
  'You are the king. You can see everything. You cannot speak.<br>'+
- 'Your team is blind. Your only voice is the bell.<br>'+
+ 'Your team is blind, and each of them is a separate person who can get lost. Your only voice is the bell.<br>'+
  'Invent a language. Reach the exit. Don\'t wake the dead.'+
  '<div class="small">Press any key to start. Headphones recommended.</div>');
 requestAnimationFrame(frame);
