@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 
 const PORT = process.env.PORT || 3000;
-const ROLES = ['king', 'scout', 'gunner', 'doorop'];
+const ROLES = ['king', 'archer', 'thief'];
 const clients = new Map(); // id -> {id,name,role,res}
 let started = false;
 let nextId = 1;

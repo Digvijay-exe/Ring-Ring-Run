@@ -24,14 +24,43 @@ canvas{image-rendering:pixelated;border:2px solid var(--edge);background:#000;ma
 #msg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:rgba(5,4,10,.82);padding:20px;font-size:15px;line-height:1.6}
 #msg h2{color:var(--lamp);letter-spacing:5px;font-size:28px;margin:0 0 10px}
 #msg .small{opacity:.7;font-size:12px;margin-top:10px}
+body.blindmode #leaderPanel{display:none}
+body.blindmode #blind{width:min(96vw,960px)!important;height:auto!important;aspect-ratio:4/3}
+body.blindmode #hud,body.blindmode #legend{width:min(96vw,960px)}
+#bstage{position:relative}
+#lobby{position:fixed;inset:0;z-index:50;background:rgba(5,4,10,.96);display:flex;align-items:center;justify-content:center;padding:16px}
+#lobby .box{max-width:560px;width:100%;border:2px solid var(--edge);background:#0f0e1a;padding:20px 24px;line-height:1.7}
+#lobby h2{color:var(--lamp);letter-spacing:6px;margin:0 0 6px}
+#lobby input{font:inherit;background:#1a1930;color:var(--ink);border:1px solid var(--edge);padding:6px 8px;width:100%;margin:6px 0}
+#lobby button{font:inherit;background:#1a1930;color:var(--lamp);border:1px solid var(--lamp);padding:6px 12px;margin:4px 4px 4px 0;cursor:pointer}
+#lobby button:disabled{opacity:.35;cursor:default}
+#lobby .row{display:flex;justify-content:space-between;border-bottom:1px dashed var(--edge);padding:2px 0}
+.small{opacity:.7;font-size:12px}
 kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--lamp)}
 </style>
 </head>
 <body>
 <h1>RING RING RUN</h1>
 <div class="sub">The king can't speak. Listen.</div>
+<div id="lobby"><div class="box">
+  <h2>RING RING RUN</h2>
+  <div id="lbJoin">
+    Name <input id="lbName" maxlength="14" value="" placeholder="your name">
+    <button id="lbJoinBtn">Join lobby</button> <button id="lbSolo">Play solo (one keyboard)</button>
+    <div class="small">Lobby needs <b>node server.js</b> running. Solo works from the file alone.</div>
+    <div id="lbErr" style="color:#ff8080"></div>
+  </div>
+  <div id="lbRoom" style="display:none">
+    <div class="small">Others join at: <b id="lbAddr"></b></div>
+    <div id="lbList" style="margin:8px 0"></div>
+    <div>Pick your role:</div>
+    <div id="lbRoles"></div>
+    <button id="lbStart" disabled>Start game (king only)</button>
+    <div id="lbHint" class="small"></div>
+  </div>
+</div></div>
 <div id="wrap">
-  <div class="panel">
+  <div class="panel" id="leaderPanel">
     <div class="label">LEADER VIEW (sighted, mute)</div>
     <div id="stage">
       <canvas id="leader" width="800" height="600"></canvas>
@@ -40,12 +69,12 @@ kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--la
   </div>
   <div class="panel">
     <div class="label" id="blindLabel">BLIND VIEW (the bell lights up what is near)</div>
-    <canvas id="blind" width="320" height="240"></canvas>
+    <div id="bstage"><canvas id="blind" width="320" height="240"></canvas></div>
     <div id="hud"></div>
     <div id="legend">
-      <b>You control ONE person.</b> <kbd>1</kbd> king <kbd>2</kbd> scout <kbd>3</kbd> gunner <kbd>4</kbd> door-op (or <kbd>Tab</kbd>). <kbd>T</kbd> teammates follow the king on/off.<br>
+      <b>You control ONE person.</b> <kbd>1</kbd> king <kbd>2</kbd> archer <kbd>3</kbd> thief (or <kbd>Tab</kbd>). <kbd>T</kbd> teammates follow the king on/off.<br>
       <b>King:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move relative to where you look, <kbd>Mouse</kbd> look (click view, <kbd>Esc</kbd> frees), <kbd>Q</kbd>/<kbd>E</kbd> bell left/right, <kbd>B</kbd> bell sound, <kbd>C</kbd> look ahead<br>
-      <b>Blind:</b> <kbd>W</kbd>/<kbd>S</kbd> forward/back, <kbd>A</kbd>/<kbd>D</kbd> turn. <b>Gunner:</b> <kbd>Space</kbd> shoot (the bullet hits friends too). <b>Door-op:</b> <kbd>F</kbd> door.<br>
+      <b>Blind:</b> <kbd>W</kbd>/<kbd>S</kbd> forward/back, <kbd>A</kbd>/<kbd>D</kbd> turn. <b>Archer:</b> <kbd>Space</kbd> loose an arrow (it hits friends too). <b>Thief:</b> <kbd>F</kbd> pick a lock (noisy, stand still).<br>
       Win: king at the exit with everyone alive within 4 tiles. <kbd>R</kbd> restart. Headphones: left bell = left ear.
     </div>
   </div>
@@ -55,10 +84,10 @@ kbd{border:1px solid var(--edge);padding:0 5px;background:#1a1930;color:var(--la
 /* ===================== LEVELS ===================== */
 /* mazes are generated from a fixed seed (same maze every run). # wall  . floor  S start  E exit  D door (starts closed)  G ghost */
 const LEVELS=[
- {name:'First Toll',ammo:3,gen:{w:21,h:13,seed:11,ghosts:1,doors:0,braid:0.05}},
- {name:'The Door Room',ammo:4,gen:{w:27,h:17,seed:23,ghosts:2,doors:2,braid:0.05}},
- {name:'Dead Ends',ammo:5,stalk:true,gen:{w:33,h:21,seed:37,ghosts:4,doors:3,braid:0.04}},
- {name:'Wake the Dead',ammo:6,stalk:true,gen:{w:41,h:25,seed:53,ghosts:6,doors:4,braid:0.04}}
+ {name:'First Toll',ammo:3,gen:{w:21,h:13,seed:219,ghosts:1,doors:0,braid:0.05}},
+ {name:'The Door Room',ammo:4,gen:{w:27,h:17,seed:35,ghosts:2,doors:2,braid:0.05}},
+ {name:'Dead Ends',ammo:5,stalk:true,gen:{w:33,h:21,seed:9,ghosts:4,doors:3,braid:0.04}},
+ {name:'Wake the Dead',ammo:6,stalk:true,gen:{w:41,h:25,seed:218,ghosts:6,doors:4,braid:0.04}}
 ];
 /* ===================== END LEVELS ===================== */
 
@@ -68,6 +97,9 @@ const cL=$('leader'),xL=cL.getContext('2d'),cB=$('blind'),xB=cB.getContext('2d')
 xL.imageSmoothingEnabled=false;xB.imageSmoothingEnabled=false;
 const now=()=>performance.now()/1000;
 let S=null,lvl=0,started=false,bellIdx=0;
+let MODE='solo',HUMANS=new Set(),loadCount=0;  /* solo = one keyboard | king = host of an online game | blind = remote player */
+const EVQ=[];
+function netEvent(e){if(MODE==='king')EVQ.push(e);}
 const BELLS=['bell','meow','bruh'];
 
 /* ===================== AUDIO ===================== */
@@ -119,7 +151,8 @@ function playBell(side){
   }
 }
 const sfx={
-  shot:()=>{noise(0.25,0.5,0);tone('square',400,80,0.2,0.3,0);},
+  shot:()=>{tone('triangle',260,90,0.28,0.45,0);noise(0.1,0.25,0);tone('sawtooth',1200,300,0.18,0.12,0,{type:'bandpass',f:1500});},
+  pick:()=>{tone('square',2000,1700,0.03,0.22,0);setTimeout(()=>tone('square',1500,1300,0.025,0.16,0),60);},
   click:()=>tone('square',300,300,0.05,0.2,0),
   hurt:()=>tone('square',220,50,0.35,0.5,0),
   door:()=>tone('square',140,110,0.18,0.3,0),
@@ -138,157 +171,56 @@ const sfx={
   blackout:()=>{tone('sine',52,28,0.6,0.7,0);noise(0.12,0.25,0);}
 };
 
+['shot','pick','hurt','door','kill','win','lose','chomp','scream','blackout'].forEach(n=>{
+  const f=sfx[n];sfx[n]=()=>{f();netEvent({e:n});};
+});
+
 /* ===================== LOGIC ===================== */
 function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
 /* recursive-backtracker maze + a few loops, exit at the far end, closed doors spread along the solution, ghosts far from the start */
 function genMaze(o){
-  /* Deterministic, connected maze generation. Keep this function independent
-     of gameplay state so the same seed always creates the same level. */
-  const w=Math.max(9,Math.floor(o.w)|1),h=Math.max(9,Math.floor(o.h)|1);
-  const rnd=mulberry((Number(o.seed)||1)>>>0);
-  const g=Array.from({length:h},()=>Array(w).fill('#'));
-  const dirs=[[2,0],[-2,0],[0,2],[0,-2]];
-
-  /* 1. Recursive-backtracker equivalent using an explicit stack (no recursion limit). */
-  const stack=[[1,1]];
-  g[1][1]='.';
-  while(stack.length){
-    const [x,y]=stack[stack.length-1],choices=[];
-    for(const [dx,dy] of dirs){
-      const nx=x+dx,ny=y+dy;
-      if(nx>0&&ny>0&&nx<w-1&&ny<h-1&&g[ny][nx]==='#')choices.push([dx,dy]);
-    }
-    if(!choices.length){stack.pop();continue;}
-    const [dx,dy]=choices[Math.floor(rnd()*choices.length)];
-    g[y+dy/2][x+dx/2]='.';
-    g[y+dy][x+dx]='.';
-    stack.push([x+dx,y+dy]);
+  const w=o.w,h=o.h,rnd=mulberry(o.seed),g=[];
+  for(let y=0;y<h;y++)g.push(new Array(w).fill('#'));
+  const st=[[1,1,0,0]];g[1][1]='.';
+  const straight=o.straight==null?0.88:o.straight;   /* chance to keep going the same way = long hallways */
+  while(st.length){
+    const [x,y,ldx,ldy]=st[st.length-1],nb=[];
+    for(const [dx,dy] of [[2,0],[-2,0],[0,2],[0,-2]]){const nx=x+dx,ny=y+dy;if(nx>0&&ny>0&&nx<w-1&&ny<h-1&&g[ny][nx]==='#')nb.push([dx,dy]);}
+    if(!nb.length){st.pop();continue;}
+    let pick=nb.find(d=>d[0]===ldx&&d[1]===ldy);
+    if(!pick||rnd()>=straight)pick=nb[Math.floor(rnd()*nb.length)];
+    const [dx,dy]=pick;
+    g[y+dy/2][x+dx/2]='.';g[y+dy][x+dx]='.';st.push([x+dx,y+dy,dx,dy]);
   }
-
-  /* 2. Add a small, seeded number of loops to reduce frustrating dead ends. */
-  const braid=Math.max(0,Math.min(0.25,Number(o.braid)||0));
   for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
     if(g[y][x]!=='#')continue;
-    const horizontal=(g[y][x-1]==='.'&&g[y][x+1]==='.'&&g[y-1][x]==='#'&&g[y+1][x]==='#');
-    const vertical=(g[y-1][x]==='.'&&g[y+1][x]==='.'&&g[y][x-1]==='#'&&g[y][x+1]==='#');
-    if((horizontal||vertical)&&rnd()<braid)g[y][x]='.';
+    const hz=x%2===0&&y%2===1&&g[y][x-1]==='.'&&g[y][x+1]==='.',vt=x%2===1&&y%2===0&&g[y-1][x]==='.'&&g[y+1][x]==='.';
+    if((hz||vt)&&rnd()<o.braid)g[y][x]='.';
   }
-
-  const inside=(x,y)=>x>0&&y>0&&x<w-1&&y<h-1;
-  const neighbors=(x,y)=>[[x+1,y],[x-1,y],[x,y+1],[x,y-1]]
-    .filter(([nx,ny])=>inside(nx,ny)&&g[ny][nx]!=='#');
-
-  /* 3. BFS from start; choose the genuinely farthest reachable tile as exit. */
-  const distance=Array.from({length:h},()=>Array(w).fill(-1));
-  const parent=new Map(),queue=[[1,1]],key=(x,y)=>x+','+y;
-  distance[1][1]=0;
-  for(let i=0;i<queue.length;i++){
-    const [x,y]=queue[i];
-    for(const [nx,ny] of neighbors(x,y)){
-      if(distance[ny][nx]!==-1)continue;
-      distance[ny][nx]=distance[y][x]+1;
-      parent.set(key(nx,ny),[x,y]);
-      queue.push([nx,ny]);
+  const d=Array.from({length:h},()=>new Array(w).fill(-1)),par={},q=[[1,1]];d[1][1]=0;
+  for(let i=0;i<q.length;i++){const [x,y]=q[i];
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=x+dx,ny=y+dy;
+      if(g[ny][nx]!=='#'&&d[ny][nx]<0){d[ny][nx]=d[y][x]+1;par[nx+','+ny]=[x,y];q.push([nx,ny]);}}}
+  const ex=q[q.length-1],path=[];
+  for(let c=ex;c;c=par[c[0]+','+c[1]])path.unshift(c);
+  const isCorr=(x,y)=>g[y][x]==='.'&&((g[y-1][x]==='#'&&g[y+1][x]==='#'&&g[y][x-1]!=='#'&&g[y][x+1]!=='#')||(g[y][x-1]==='#'&&g[y][x+1]==='#'&&g[y-1][x]!=='#'&&g[y+1][x]!=='#'));
+  for(let k=1;k<=o.doors;k++){
+    const base=Math.floor(path.length*k/(o.doors+1));
+    for(let off=0;off<12;off++){
+      let done=false;
+      for(const sg of [1,-1]){const i=base+sg*off,c=path[i];
+        if(c&&d[c[1]][c[0]]>=4&&(c[0]!==ex[0]||c[1]!==ex[1])&&isCorr(c[0],c[1])){g[c[1]][c[0]]='D';done=true;break;}}
+      if(done)break;
     }
   }
-  let exit=[1,1];
-  for(const cell of queue){
-    const [x,y]=cell;
-    if(distance[y][x]>distance[exit[1]][exit[0]])exit=cell;
-  }
-  const solution=[];
-  for(let cur=exit;cur;cur=parent.get(key(cur[0],cur[1]))){
-    solution.push(cur);
-    if(cur[0]===1&&cur[1]===1)break;
-  }
-  solution.reverse();
-
-  /* 4. Put doors on the main route, spaced apart and away from start/exit.
-        Doors remain traversable for validation because the door-op can open them. */
-  const wanted=Math.max(0,Math.floor(Number(o.doors)||0));
-  const doorCandidates=solution.slice(3,-3).filter(([x,y],i,arr)=>{
-    if(g[y][x]!=='.')return false;
-    const horizontal=(g[y][x-1]!=='#'&&g[y][x+1]!=='#'&&g[y-1][x]==='#'&&g[y+1][x]==='#');
-    const vertical=(g[y-1][x]!=='#'&&g[y+1][x]!=='#'&&g[y][x-1]==='#'&&g[y][x+1]==='#');
-    return horizontal||vertical;
-  });
-  const doors=[];
-  for(let i=0;i<wanted&&doorCandidates.length;i++){
-    const target=Math.round((i+1)*(doorCandidates.length)/(wanted+1));
-    let best=-1,bestGap=Infinity;
-    for(let j=0;j<doorCandidates.length;j++){
-      if(doors.includes(j))continue;
-      const gap=doors.length?Math.min(...doors.map(k=>Math.abs(k-j))):Infinity;
-      if(!doors.length||gap>=3){
-        const score=Math.abs(j-target);
-        if(score<bestGap){bestGap=score;best=j;}
-      }
-    }
-    if(best<0){
-      for(let j=0;j<doorCandidates.length;j++)if(!doors.includes(j)){best=j;break;}
-    }
-    if(best>=0){
-      doors.push(best);
-      const [x,y]=doorCandidates[best];g[y][x]='D';
-    }
-  }
-
-  /* 5. Place ghosts far enough from spawn and from each other; never on the exit. */
-  const ghostCandidates=[];
-  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
-    if(g[y][x]!=='.'||distance[y][x]<8||(x===1&&y===1)||(x===exit[0]&&y===exit[1]))continue;
-    const nearDoor=neighbors(x,y).some(([nx,ny])=>g[ny][nx]==='D');
-    if(!nearDoor)ghostCandidates.push([x,y]);
-  }
-  for(let i=ghostCandidates.length-1;i>0;i--){
-    const j=Math.floor(rnd()*(i+1));
-    [ghostCandidates[i],ghostCandidates[j]]=[ghostCandidates[j],ghostCandidates[i]];
-  }
-  const ghosts=[],wantedGhosts=Math.max(0,Math.floor(Number(o.ghosts)||0));
-  for(const cell of ghostCandidates){
-    if(ghosts.length>=wantedGhosts)break;
-    if(ghosts.every(([gx,gy])=>Math.abs(gx-cell[0])+Math.abs(gy-cell[1])>=6)){
-      ghosts.push(cell);
-    }
-  }
-  for(const [x,y] of ghosts)g[y][x]='G';
-
-  /* 6. Mark start/exit last so these symbols can never be overwritten. */
-  g[1][1]='S';
-  g[exit[1]][exit[0]]='E';
-  const map=g.map(row=>row.join(''));
-
-  /* 7. Fail loudly during development if a generator invariant is broken. */
-  const validation=validateGeneratedMaze(map);
-  if(!validation.ok)throw new Error('Generated maze failed validation: '+validation.errors.join('; '));
-  return map;
-}
-function validateGeneratedMaze(map){
-  const errors=[];
-  if(!Array.isArray(map)||map.length<5){return {ok:false,errors:['map is empty or too small']};}
-  const h=map.length,w=map[0].length;
-  if(map.some(row=>typeof row!=='string'||row.length!==w))errors.push('rows must have equal width');
-  const cells=map.join('');
-  if((cells.match(/S/g)||[]).length!==1)errors.push('maze must contain exactly one start');
-  if((cells.match(/E/g)||[]).length!==1)errors.push('maze must contain exactly one exit');
-  if(!errors.length){
-    const start=[map.findIndex(row=>row.includes('S')),map.findIndex(row=>row.includes('S'))];
-    const sx=map[start[0]].indexOf('S'),sy=start[0];
-    const seen=new Set([sx+','+sy]),q=[[sx,sy]];
-    for(let i=0;i<q.length;i++){
-      const [x,y]=q[i];
-      for(const [nx,ny] of [[x+1,y],[x-1,y],[x,y+1],[x,y-1]]){
-        if(nx<0||ny<0||nx>=w||ny>=h||map[ny][nx]==='#')continue;
-        const k=nx+','+ny;
-        if(!seen.has(k)){seen.add(k);q.push([nx,ny]);}
-      }
-    }
-    const ey=map.findIndex(row=>row.includes('E')),ex=map[ey].indexOf('E');
-    if(!seen.has(ex+','+ey))errors.push('exit is unreachable when doors can be opened');
-    if(map[0].split('').some(c=>c!== '#')||map[h-1].split('').some(c=>c!=='#'))errors.push('outer border must remain walled');
-    for(let y=0;y<h;y++)if(map[y][0]!=='#'||map[y][w-1]!=='#')errors.push('outer border must remain walled');
-  }
-  return {ok:errors.length===0,errors};
+  const cand=[];
+  for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++)if(g[y][x]==='.'&&d[y][x]>=10&&(x!==ex[0]||y!==ex[1]))cand.push([x,y]);
+  for(let i=cand.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[cand[i],cand[j]]=[cand[j],cand[i]];}
+  const gh=[];
+  for(const c of cand){if(gh.length>=o.ghosts)break;if(gh.every(o2=>Math.abs(o2[0]-c[0])+Math.abs(o2[1]-c[1])>=7))gh.push(c);}
+  gh.forEach(c=>{g[c[1]][c[0]]='G';});
+  g[1][1]='S';g[ex[1]][ex[0]]='E';
+  return g.map(r=>r.join(''));
 }
 let assist=true;  /* teammates you are not driving tag along behind the king (stand-ins for real people) */
 function loadLevel(n){
@@ -307,8 +239,11 @@ function loadLevel(n){
   for(const [dx,dy] of [[1,0],[0,1],[-1,0],[0,-1]])if(grid[sy+dy]&&grid[sy+dy][sx+dx]&&grid[sy+dy][sx+dx]!=='#'){d0={x:dx,y:dy};break;}
   const mk=(id,role,name)=>({id,role,name,x:sx,y:sy,dir:{x:d0.x,y:d0.y},hp:3,dead:false,how:'',stunUntil:0,hurtUntil:0,lastMove:0,botNext:now()+0.8,lost:false,
     view:{x:sx+0.5,y:sy+0.5,a:Math.atan2(d0.y,d0.x)}});
-  const players=[mk('king','leader','KING'),mk('scout','driver','SCOUT'),mk('gunner','gunner','GUNNER'),mk('doorop','doorop','DOOR-OP')];
-  S={grid,w,h,players,party:players[0],act:0,bi:2,ghosts,doorOpen:{},pings:[],puffs:[],ammo:L.ammo,
+  const players=[mk('king','leader','KING'),mk('archer','archer','ARCHER'),mk('thief','thief','THIEF')];
+  players.forEach(q=>{q.human=HUMANS.has(q.id);});
+  const hb=players.findIndex((q,i)=>i>0&&q.human);
+  loadCount++;
+  S={epoch:loadCount,grid,w,h,players,party:players[0],act:0,bi:hb>0?hb:1,ghosts,doorOpen:{},pings:[],puffs:[],ammo:L.ammo,
      state:'play',lastBell:0,shake:0,name:L.name,
      exit,shotT:-9,shotBy:'',tracer:null,gaze:Math.atan2(d0.y,d0.x),dread:0,lastT:now(),beatT:-9,nextBeat:0,nextWhisper:0,nextAmb:now()+6,
      nextBlackout:now()+12,blackoutUntil:0,scare:null,msgAt:0,note:null,waiting:[],view:players[0].view};
@@ -326,7 +261,7 @@ function ghostAt(x,y){return S.ghosts.find(g=>g.x===x&&g.y===y);}
 /* every person is their own body: own tile, facing, health, view */
 function canAct(p,t){return !p.dead&&t>=p.stunUntil;}
 function step(p,dx,dy,face){
-  if(!canAct(p,now()))return false;
+  if(!canAct(p,now())||p.pick)return false;   /* a thief picking a lock stands still */
   if(face!==false)p.dir={x:dx,y:dy};
   const nx=p.x+dx,ny=p.y+dy;
   if(!passable(nx,ny))return false;
@@ -334,6 +269,7 @@ function step(p,dx,dy,face){
 }
 function turn(p,k){
   if(!canAct(p,now()))return;
+  p.pick=null;
   const d=p.dir;p.dir=k>0?{x:-d.y,y:d.x}:{x:d.y,y:-d.x};
 }
 function bell(side){
@@ -341,20 +277,20 @@ function bell(side){
   if(K.dead||t<K.stunUntil)return;
   if(t-S.lastBell<0.35)return;
   S.lastBell=t;
-  playBell(side);
+  playBell(side);netEvent({e:'bell',side});
   S.pings.push({t,side,x:K.x,y:K.y});
   /* the bell is noise: nearby ghosts get curious */
   S.ghosts.forEach(g=>{
     if(Math.abs(g.x-K.x)+Math.abs(g.y-K.y)<=8)g.alert=t+2.5;
   });
 }
-/* only the gunner shoots, and the bullet hits the first thing in the line: ghost OR teammate */
-function shoot(){
-  const p=S.players[S.act],t=now();
-  if(p.role!=='gunner'||!canAct(p,t)||S.ammo<=0){sfx.click();return;}
+/* only the ARCHER shoots, and the arrow hits the first thing in the line: ghost OR teammate */
+function shoot(p){
+  p=p||S.players[S.act];const t=now();
+  if(p.role!=='archer'||!canAct(p,t)||p.pick||S.ammo<=0){sfx.click();return;}
   S.ammo--;sfx.shot();
   S.shotT=t;S.shotBy=p.id;
-  S.ghosts.forEach(g=>{g.alert=t+3;});/* gunshots are loud */
+  S.ghosts.forEach(g=>{if(Math.abs(g.x-p.x)+Math.abs(g.y-p.y)<=10)g.alert=Math.max(g.alert,t+2.5);});/* a bowstring twang carries */
   let x=p.x,y=p.y,lx=x,ly=y;
   const d=p.dir;
   for(let i=0;i<14;i++){
@@ -375,15 +311,15 @@ function shoot(){
 }
 /* shot a friend: they are hurt and blinded for a while, and the bang calls every ghost nearby */
 function friendlyFire(v,t){
-  v.hp--;v.hurtUntil=t+1.3;v.stunUntil=t+2.5;
+  v.hp--;v.hurtUntil=t+1.3;v.stunUntil=t+2.5;v.pick=null;
   sfx.hurt();
   S.ghosts.forEach(g=>{if(Math.abs(g.x-v.x)+Math.abs(g.y-v.y)<=14)g.alert=t+6;});
-  S.note={t,text:'FRIENDLY FIRE: '+v.name+' is hit and blinded!'};
+  S.note={t,text:'FRIENDLY FIRE: '+v.name+' took an arrow and is blinded!'};
   if(v===S.players[0])S.shake=t+0.3;
   if(v.hp<=0)killPlayer(v,t,'shot');
 }
 function hurtPlayer(p,t){
-  p.hp--;p.hurtUntil=t+1.3;p.stunUntil=Math.max(p.stunUntil,t+0.4);
+  p.hp--;p.hurtUntil=t+1.3;p.stunUntil=Math.max(p.stunUntil,t+0.4);p.pick=null;
   if(p===S.players[0])S.shake=t+0.3;
   sfx.hurt();
   S.note={t,text:p.name+' was clawed!'};
@@ -404,20 +340,33 @@ function gameOver(why){
   S.state='lose';S.loseWhy=why;S.msgAt=now()+(S.scare?1.8:0.4);
   sfx.lose();
 }
-function toggleDoor(){
-  const p=S.players[S.act];
-  if(p.role!=='doorop'||!canAct(p,now())){sfx.click();return;}
+/* only the THIEF works doors. Closed doors are locked: picking takes a moment, stands still, and the scraping draws ghosts within 4 tiles. Shutting an open door is quick. */
+function toggleDoor(p){
+  p=p||S.players[S.act];
+  if(p.role!=='thief'||!canAct(p,now())){sfx.click();return;}
   for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
     const x=p.x+dx,y=p.y+dy;
     if(inb(x,y)&&S.grid[y][x]==='D'){
       const k=x+','+y;
-      if(S.doorOpen[k]&&ghostAt(x,y))return;/* can't close on a ghost */
-      S.doorOpen[k]=!S.doorOpen[k];
-      sfx.door();
+      if(S.doorOpen[k]){if(ghostAt(x,y))return;S.doorOpen[k]=false;sfx.door();return;}   /* can't shut it on a ghost */
+      if(p.pick&&p.pick.k===k)return;
+      p.pick={k,x,y,t0:now(),dur:1.5,tick:0};
+      p.dir={x:dx,y:dy};
       return;
     }
   }
   sfx.click();
+}
+function tickPicks(t){
+  for(const q of S.players){
+    const pk=q.pick;if(!pk)continue;
+    if(!canAct(q,t)){q.pick=null;continue;}
+    if(t-pk.tick>=0.22){
+      pk.tick=t;sfx.pick();
+      S.ghosts.forEach(g=>{if(Math.abs(g.x-q.x)+Math.abs(g.y-q.y)<=4)g.alert=Math.max(g.alert,t+1.5);});
+    }
+    if(t>=pk.t0+pk.dur){S.doorOpen[pk.k]=true;q.pick=null;sfx.door();S.note={t,text:'Lock picked!'};}
+  }
 }
 function bfsNext(from,to){
   const key=(x,y)=>x+','+y,q=[[from.x,from.y]],prev={};
@@ -442,7 +391,7 @@ function bfsNext(from,to){
 /* a teammate you are not driving follows the king, but slowly: outrun them and they lose you */
 function botStep(p,t){
   if(t<p.botNext)return;
-  p.botNext=t+(p.role==='driver'?0.42:0.62);
+  p.botNext=t+0.55;
   const K=S.players[0];
   if(K.dead)return;
   const dist=Math.abs(p.x-K.x)+Math.abs(p.y-K.y);
@@ -552,12 +501,31 @@ function seenByKing(g){
   }
   return true;
 }
+/* dread: how close the nearest ghost is to the person you control, smoothed. Drives sound, light and screen effects.
+   Runs on whichever computer is playing that person (the king's, or a blind player's own). */
+function dreadAudio(t,dt){
+  const L=listener();
+  let nearest=null,nd=99;
+  for(const g of S.ghosts){const d=Math.hypot(g.x-L.x,g.y-L.y);if(d<nd){nd=d;nearest=g;}}
+  const target=nearest?Math.max(0,Math.min(1,1-nd/8)):0;
+  S.dread+=(target-S.dread)*(1-Math.exp(-dt*4));
+  ensureAmbient();
+  if(drone){setParam(drone.g.gain,0.025+S.dread*0.13);setParam(drone.f.frequency,130+S.dread*520);}
+  if(S.dread>0.12&&t>=S.nextBeat){beat();S.nextBeat=t+1.15-0.77*S.dread;}
+  if(nearest&&nd<9&&t>=S.nextWhisper){
+    S.nextWhisper=t+0.9+Math.random()*(2.4-S.dread*1.8);
+    whisper(bearingPan(nearest),0.5+S.dread*1.3);
+    if(nd<3&&Math.random()<0.5)setTimeout(()=>whisper(-bearingPan(nearest)*0.6,0.6+S.dread),180);  /* a second voice, behind you */
+  }
+  ambience(t);
+}
 function update(t){
   if(S.state!=='play')return;
   const dt=Math.min(0.1,Math.max(0.001,t-S.lastT));S.lastT=t;
   const stalk=!!LEVELS[lvl].stalk;
   const interval=Math.max(0.35,0.62-lvl*0.05)*(stalk?0.8:1);
-  if(assist)for(let i=1;i<S.players.length;i++){const q=S.players[i];if(i!==S.act&&canAct(q,t))botStep(q,t);}
+  if(assist)for(let i=1;i<S.players.length;i++){const q=S.players[i];if(i!==S.act&&!q.human&&canAct(q,t))botStep(q,t);}
+  tickPicks(t);
   const L=listener();
   let nearest=null,nd=99;
   for(const g of S.ghosts){
@@ -581,18 +549,7 @@ function update(t){
     if(!S.waiting.length){win();return;}
   }
 
-  /* dread: how close the nearest ghost is to the person you control, smoothed. Drives sound, light and screen effects. */
-  const target=nearest?Math.max(0,Math.min(1,1-nd/8)):0;
-  S.dread+=(target-S.dread)*(1-Math.exp(-dt*4));
-  ensureAmbient();
-  if(drone){setParam(drone.g.gain,0.025+S.dread*0.13);setParam(drone.f.frequency,130+S.dread*520);}
-  if(S.dread>0.12&&t>=S.nextBeat){beat();S.nextBeat=t+1.15-0.77*S.dread;}
-  if(nearest&&nd<9&&t>=S.nextWhisper){
-    S.nextWhisper=t+0.9+Math.random()*(2.4-S.dread*1.8);
-    whisper(bearingPan(nearest),0.5+S.dread*1.3);
-    if(nd<3&&Math.random()<0.5)setTimeout(()=>whisper(-bearingPan(nearest)*0.6,0.6+S.dread),180);  /* a second voice, behind you */
-  }
-  ambience(t);
+  dreadAudio(t,dt);
   if(t>=S.nextBlackout&&S.dread>0.3){
     S.blackoutUntil=t+0.3+Math.random()*0.8;
     S.nextBlackout=t+7+Math.random()*9-S.dread*3;
@@ -743,9 +700,8 @@ const ROLES={
         [4,6,'k'],[4,7,'s'],[4,8,'s'],[4,9,'k'],
         [6,6,'t'],[6,7,'t'],[6,8,'t'],[6,9,'t']]),
         c:'#7a3fb0',d:'#52287a'},
- driver:{spr:variant(CHAR,[[9,2,'g'],[10,2,'g']]),c:'#3b6fd8',d:'#254a96'},
- gunner:{spr:variant(CHAR,[[9,13,'g'],[9,14,'g'],[10,13,'g']]),c:'#d84a4a',d:'#963030'},
- doorop:{spr:variant(CHAR,[[9,13,'o'],[10,13,'o'],[10,14,'o']]),c:'#3fbf6a',d:'#277a43'}
+ archer:{spr:variant(CHAR,[[9,13,'g'],[9,14,'g'],[10,13,'g']]),c:'#7a8f5a',d:'#4d5c38'},
+ thief:{spr:variant(CHAR,[[9,13,'o'],[10,13,'o'],[10,14,'o']]),c:'#a8743c',d:'#6e4a26'}
 };
 function rolePal(r){return {h:'#2a2236',s:'#f0c9a0',b:'#f4f4f4',c:r.c,d:r.d,l:'#30304f',k:'#07060d',y:'#ffd36b',g:'#c0c0c8',t:'#ff5a5a',o:'#ff9a3c'};}
 
@@ -870,7 +826,58 @@ function ghostCanvas(it,t){
   return monSprite(it.frozen?'f':it.alert?'a':'n',view,frame);
 }
 const roleCv={};
-function roleCanv(r){return roleCv[r]||(roleCv[r]=sprCanvas(ROLES[r].spr,rolePal(ROLES[r])));}
+/* the three people, painted as 24x32 pixel-art figures (hooded archer, masked thief, crowned king) */
+function paintPerson(role){
+  const c=document.createElement('canvas');c.width=24;c.height=32;const x=c.getContext('2d');
+  const R=(col,a,b,w,h)=>{x.fillStyle=col;x.fillRect(a,b,w,h);};
+  if(role==='archer'){
+    const hood='#454b3a',hoodD='#2f3329',hoodL='#5a6350',face='#16140f',mask='#23221d',eye='#d9c89a',tun='#5c6552',tunD='#444b3c',sl='#d6cbb0',slD='#b3a88c',lea='#6b4a32',leaD='#3d281c',pan='#2b2b30',boot='#5a3a28',bootD='#3f281b',wood='#6e3d24',woodL='#8a5a38',str='#d8cfae',shaft='#a89a74',steel='#9aa0aa',skin='#c99a6c';
+    R(wood,20,1,2,1);R(wood,21,2,1,2);R(wood,22,4,1,4);R(wood,23,8,1,14);R(wood,22,22,1,4);R(wood,21,26,1,2);R(wood,20,28,2,1);R(woodL,23,12,1,6);R(str,20,2,1,26);
+    R(leaD,4,5,3,9);R(shaft,4,2,1,4);R(str,6,3,1,3);R(shaft,5,1,1,5);
+    R(hood,7,1,10,3);R(hood,6,3,12,8);R(hoodD,6,3,2,8);R(hoodL,9,2,5,1);
+    R(face,8,5,8,5);R(mask,8,7,8,3);R(eye,9,6,2,1);R(eye,13,6,2,1);
+    R(hoodD,5,10,14,3);R(hood,6,10,12,2);
+    R(tun,6,12,12,9);R(tunD,6,12,2,9);R(tunD,16,14,2,7);
+    for(let i=0;i<9;i++)R(lea,8+i,12+i,2,1);
+    R(leaD,6,20,12,2);R(steel,11,20,2,2);
+    R(tunD,6,22,12,4);R(tun,7,22,3,5);R(tun,12,22,4,4);R(tunD,9,26,1,1);R(tunD,14,26,1,1);
+    R(pan,8,26,3,4);R(pan,13,26,3,4);R(boot,7,29,5,3);R(boot,12,29,5,3);R(bootD,7,31,5,1);R(bootD,12,31,5,1);
+    R(sl,3,13,5,3);R(slD,3,15,5,1);R(lea,1,15,4,2);R(skin,0,15,2,2);
+    R(shaft,2,16,18,1);R(steel,0,16,3,1);R(steel,1,15,1,3);R(str,17,15,2,3);
+    R(sl,17,13,5,3);R(slD,17,15,5,1);R(lea,19,15,3,2);R(skin,19,17,3,2);
+  }else if(role==='thief'){
+    const hood='#7b5a3a',hoodD='#573d27',hoodL='#946e47',mask='#17151a',scarf='#2c2832',scarfL='#3d3844',vest='#6d4b2e',vestD='#4f351f',sl='#d9cfb4',slD='#b5aa8d',brace='#4a3426',sash='#3a3f52',sashD='#292d3b',cloth='#7d5c3d',clothD='#5d4229',pan='#2d2b34',boot='#5d3d2a',bootD='#412a1c',steel='#c0c4ce',steelD='#808694',skin='#c99a6c',eye='#e6dcc0';
+    R(hood,7,1,10,3);R(hood,6,3,12,8);R(hoodD,6,3,2,8);R(hoodL,9,2,5,1);
+    R(hoodD,8,5,8,5);R(mask,8,6,8,4);R(eye,9,6,2,1);R(eye,13,6,2,1);
+    R(scarf,4,10,16,3);R(scarf,6,13,12,2);R(scarf,8,15,8,2);R(scarfL,5,10,4,1);R(scarfL,11,14,2,1);
+    R(vest,7,12,10,9);R(vestD,7,12,2,9);R(scarf,9,12,6,5);
+    R(sl,3,13,4,6);R(slD,3,13,1,6);R(brace,3,18,4,3);R(skin,3,21,3,2);R(brace,2,22,3,1);R(steel,2,23,1,5);R(steelD,3,23,1,3);
+    R(sl,17,13,4,6);R(slD,20,13,1,6);R(brace,17,18,4,3);R(skin,18,21,3,2);R(steelD,21,22,1,8);R(brace,20,21,2,1);
+    R(sash,7,20,10,2);R(sashD,7,21,10,1);
+    R(cloth,7,22,10,6);R(clothD,7,22,2,6);R(clothD,8,28,1,1);R(clothD,10,28,1,1);R(clothD,12,28,1,1);R(clothD,14,28,1,1);
+    R(pan,8,26,3,4);R(pan,13,26,3,4);R(boot,7,29,5,3);R(boot,12,29,5,3);R(bootD,7,31,5,1);R(bootD,12,31,5,1);
+  }else{
+    const gold='#ffd36b',goldD='#c9972a',skin='#e8c49a',beard='#d8d8d8',robe='#6b3fa0',robeD='#4a2a72',robeL='#8a5cc0',boot='#2b2230';
+    R(gold,8,1,8,2);R(gold,8,0,1,1);R(gold,11,0,2,1);R(gold,15,0,1,1);R('#ff4a4a',11,1,2,1);
+    R(skin,9,3,6,5);R('#17151a',10,5,1,1);R('#17151a',13,5,1,1);R(beard,9,7,6,3);
+    R(robeL,5,10,14,2);R(robe,6,12,12,16);R(robeD,6,12,2,16);R(robeD,16,12,2,16);R(goldD,11,12,2,12);
+    R(robeD,3,12,3,8);R(robeD,18,12,3,8);R(skin,3,20,3,2);R(skin,18,20,3,2);
+    R(gold,19,16,4,4);R(goldD,18,20,5,1);R(goldD,20,15,2,1);
+    R('#4a4458',2,17,3,1);R(gold,2,18,3,3);R('#fff2b0',3,19,1,1);
+    R(boot,7,28,5,4);R(boot,12,28,5,4);
+  }
+  /* dark outline around the silhouette */
+  const id=x.getImageData(0,0,24,32),d=id.data,o=new Uint8ClampedArray(d);
+  for(let yy=0;yy<32;yy++)for(let xx=0;xx<24;xx++){
+    const i=(yy*24+xx)*4;if(d[i+3])continue;
+    let near=false;
+    for(const [ox,oy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=xx+ox,ny=yy+oy;if(nx>=0&&ny>=0&&nx<24&&ny<32&&d[(ny*24+nx)*4+3]){near=true;break;}}
+    if(near){o[i]=18;o[i+1]=13;o[i+2]=10;o[i+3]=255;}
+  }
+  id.data.set(o);x.putImageData(id,0,0);
+  return c;
+}
+function roleCanv(r){return roleCv[r]||(roleCv[r]=paintPerson(r));}
 const ghostCanv=[sprCanvas(GHOST_A,GP),sprCanvas(GHOST_B,GP)];
 const ghostCanvAlert=[sprCanvas(GHOST_A,GP_ALERT),sprCanvas(GHOST_B,GP_ALERT)];
 const GP_FROZEN={W:'#ffffff',X:'#b8c4d8',x:'#7a869e',O:'#1a1a2e',M:'#1a1a2e'};
@@ -989,7 +996,7 @@ function renderLeader(){
     const px=ox+P.x*ts,py=oy+P.y*ts,m=ts*0.66;
     const flash=t<S.players[0].hurtUntil&&Math.floor(t*12)%2===0;
     if(flash)return;
-    const order=[['leader',0,-0.46],['driver',0.34,-0.46],['gunner',0,0.04],['doorop',0.34,0.04]];
+    const order=[['leader',0,-0.46],['archer',0.34,-0.46],['thief',0,0.04]];
     order.forEach(([role,fx,fy],i)=>{
       const R=ROLES[role],bob=Math.sin(t*6+i*1.7)*1.3;
       const sx=px+fx*ts,sy=py+fy*ts+bob;
@@ -1109,16 +1116,20 @@ const TEX_DOOR=mkTex((x,y)=>{
 const TEX_FLOOR=mkTex((x,y)=>{const t=((x>>3)+(y>>3))&1,v=(t?36:29)+Math.floor(hash(x,y,3)*8);return [v,v-1,v+16];});
 const TEX_CEIL=mkTex((x,y)=>{const t=((x>>3)+(y>>3))&1,v=(t?16:12)+Math.floor(hash(x,y,5)*5);return [v,v,v+12];});
 
+const CONE_R=5,CONE_A=0.62;
+/* what the king's lantern cone reveals: tiles in line of sight, inside the view cone, never more than 5 tiles away.
+   Returns Map "x,y" -> {d: distance, cone: true if inside the cone (a possible path ahead)} */
 function kingVisible(){
-  const V=S.view,set=new Set(),t=now();
-  const R=7.5*(1-0.3*S.dread),black=t<S.blackoutUntil;
+  const V=S.view,set=new Map(),t=now();
+  const R=Math.max(3.5,CONE_R*(1-0.3*S.dread)),black=t<S.blackoutUntil;
   const px=Math.floor(V.x),py=Math.floor(V.y);
-  set.add(px+','+py);
+  set.set(px+','+py,{d:0,cone:false});
   if(black)return set;
-  for(let y=Math.max(0,py-8);y<=Math.min(S.h-1,py+8);y++)for(let x=Math.max(0,px-8);x<=Math.min(S.w-1,px+8);x++){
+  for(let y=Math.max(0,py-6);y<=Math.min(S.h-1,py+6);y++)for(let x=Math.max(0,px-6);x<=Math.min(S.w-1,px+6);x++){
     const dx=x+0.5-V.x,dy=y+0.5-V.y,d=Math.hypot(dx,dy);
     if(d>R)continue;
-    if(d>1.7){let da=Math.atan2(dy,dx)-S.gaze;da=Math.atan2(Math.sin(da),Math.cos(da));if(Math.abs(da)>0.62)continue;}
+    let cone=false;
+    if(d>1.5){let da=Math.atan2(dy,dx)-S.gaze;da=Math.atan2(Math.sin(da),Math.cos(da));if(Math.abs(da)>CONE_A)continue;cone=true;}
     let ok=true;
     for(let st=0.2;st<d-0.45;st+=0.2){
       const sx=Math.floor(V.x+dx/d*st),sy=Math.floor(V.y+dy/d*st);
@@ -1126,7 +1137,7 @@ function kingVisible(){
       const c=S.grid[sy]&&S.grid[sy][sx];
       if(c==='#'||(c==='D'&&!S.doorOpen[sx+','+sy])){ok=false;break;}
     }
-    if(ok)set.add(x+','+y);
+    if(ok)set.set(x+','+y,{d,cone});
   }
   return set;
 }
@@ -1203,7 +1214,7 @@ function renderLeaderFP(){
     const screenX=Math.floor((W/2)*(1+tx/ty));
     const size=Math.min(H*3,Math.floor(H/ty*(it.k==='g'?0.95:it.k==='p'?0.8:1.0)));
     const bob=it.k==='g'?Math.sin(t*4+it.id)*size*0.04:0;
-    const isG=it.k==='g',bw=size,bh=size;
+    const isG=it.k==='g',bw=it.k==='p'?Math.floor(size*0.75):size,bh=size;
     const top=Math.floor(isG?half+size/2-bh+bob:it.k==='p'?half+Math.floor(H/ty)/2-bh:half-size/2+bob),x0=Math.floor(screenX-bw/2);
     const vis=Math.min(1,0.4+lightAt(Math.sqrt(it.d))*0.9);
     for(let sx=Math.max(0,x0);sx<Math.min(W,x0+bw);sx++){
@@ -1214,9 +1225,9 @@ function renderLeaderFP(){
         fpx.drawImage(ghostCanvas(it,t),tex,0,1,MON_SZ,sx,top,1,bh);
         fpx.globalAlpha=1;
       }else if(it.k==='p'){
-        const tex=Math.floor((sx-x0)/bw*16);
+        const tex=Math.floor((sx-x0)/bw*24);
         fpx.globalAlpha=0.95*vis;
-        fpx.drawImage(roleCanv(it.role),tex,0,1,16,sx,top,1,bh);
+        fpx.drawImage(roleCanv(it.role),tex,0,1,32,sx,top,1,bh);
         fpx.globalAlpha=1;
       }else if(Math.abs(sx-screenX)<size*0.2){
         fpx.fillStyle='rgba(255,211,107,'+(0.5*(0.7+0.3*Math.sin(t*3)))+')';
@@ -1261,22 +1272,38 @@ function renderLeaderFP(){
   ctx.fillStyle='#8a6a1c';ctx.fillRect(-40,26,80,4);
   ctx.fillStyle='#5a4210';ctx.fillRect(-5,30,10,12);
   ctx.restore();
-  /* FOG-OF-WAR MINIMAP: no map of the maze. Only the tiles the king can see right now (lit, in line of sight,
-     inside the view cone or right beside him) are drawn; nothing is remembered once you look away. */
+  /* LANTERN-CONE MINIMAP: a small window centred on the king. No map of the maze: only tiles inside the lantern cone
+     (line of sight, 5 tiles at most) are drawn, and the open floor in the cone glows gold = the paths ahead of you. */
   {
-    const vis=kingVisible(),m=7,mx0=CW-S.w*m-14,my0=14;
-    for(const key of vis){
-      const [x,y]=key.split(',').map(Number),c=S.grid[y][x];
-      ctx.fillStyle=c==='#'?'#4a4880':c==='D'?(S.doorOpen[key]?'#6b4a22':'#ff9a3c'):c==='E'?'#ffd36b':'#1d1c3a';
-      ctx.fillRect(mx0+x*m,my0+y*m,m-1,m-1);
+    const vis=kingVisible(),m=14,hx=7,hy=5,ww=(2*hx+1)*m,hh=(2*hy+1)*m,mx0=CW-ww-16,my0=16;
+    const sx=x=>mx0+(x-V.x+hx+0.5)*m,sy=y=>my0+(y-V.y+hy+0.5)*m;
+    ctx.save();
+    ctx.fillStyle='rgba(4,3,12,0.72)';ctx.fillRect(mx0-4,my0-4,ww+8,hh+8);
+    ctx.strokeStyle='rgba(255,211,107,0.45)';ctx.lineWidth=2;ctx.strokeRect(mx0-4,my0-4,ww+8,hh+8);
+    ctx.beginPath();ctx.rect(mx0,my0,ww,hh);ctx.clip();
+    const pcx=sx(V.x),pcy=sy(V.y);
+    for(const [key,v] of vis){
+      const [x,y]=key.split(',').map(Number),c=S.grid[y][x],X=sx(x),Y=sy(y);
+      if(c==='#'){ctx.fillStyle=v.cone?'#7d78d8':'#3c3a6a';ctx.fillRect(X,Y,m,m);continue;}
+      if(c==='D'){ctx.fillStyle=S.doorOpen[key]?'#8a6a30':'#ff9a3c';ctx.fillRect(X,Y,m,m);continue;}
+      if(c==='E'){ctx.fillStyle='#ffe58a';ctx.fillRect(X,Y,m,m);continue;}
+      ctx.fillStyle='#16152e';ctx.fillRect(X,Y,m,m);
+      if(v.cone){ctx.fillStyle='rgba(255,211,107,'+(0.9-0.45*v.d/CONE_R)+')';ctx.fillRect(X,Y,m,m);}   /* a path you could take */
     }
-    S.ghosts.forEach(g=>{if(!vis.has(g.x+','+g.y))return;ctx.fillStyle=g.frozen?'#ffffff':'#8fffd0';ctx.fillRect(mx0+g.x*m+1,my0+g.y*m+1,m-3,m-3);});
-    S.players.forEach((q,i)=>{if(i===0||q.dead||!vis.has(q.x+','+q.y))return;ctx.fillStyle=ROLES[q.role].c;ctx.fillRect(mx0+q.view.x*m-2,my0+q.view.y*m-2,5,5);});
-    const pcx=mx0+V.x*m,pcy=my0+V.y*m;
-    ctx.strokeStyle='rgba(255,211,107,0.5)';ctx.lineWidth=1;
-    for(const da of [-0.58,0.58]){ctx.beginPath();ctx.moveTo(pcx,pcy);ctx.lineTo(pcx+Math.cos(LA+da)*m*2.6,pcy+Math.sin(LA+da)*m*2.6);ctx.stroke();}
-    ctx.strokeStyle='#5fd6ff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pcx,pcy);ctx.lineTo(pcx+Math.cos(V.a)*m*1.8,pcy+Math.sin(V.a)*m*1.8);ctx.stroke();
-    ctx.fillStyle='#ffd36b';ctx.fillRect(pcx-3,pcy-3,6,6);
+    /* the cone itself */
+    const R=CONE_R*m,g0=S.gaze-CONE_A,g1=S.gaze+CONE_A;
+    ctx.fillStyle='rgba(255,211,107,0.12)';
+    ctx.beginPath();ctx.moveTo(pcx,pcy);ctx.arc(pcx,pcy,R,g0,g1);ctx.closePath();ctx.fill();
+    ctx.strokeStyle='rgba(255,211,107,0.55)';ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(pcx+Math.cos(g0)*R,pcy+Math.sin(g0)*R);ctx.lineTo(pcx,pcy);ctx.lineTo(pcx+Math.cos(g1)*R,pcy+Math.sin(g1)*R);ctx.stroke();
+    ctx.beginPath();ctx.arc(pcx,pcy,R,g0,g1);ctx.stroke();
+    S.ghosts.forEach(g=>{if(!vis.has(g.x+','+g.y))return;ctx.fillStyle=g.frozen?'#ffffff':'#ff5a5a';ctx.beginPath();ctx.arc(sx(g.x)+m/2,sy(g.y)+m/2,m*0.38,0,7);ctx.fill();});
+    S.players.forEach((q,i)=>{if(i===0||q.dead||!vis.has(q.x+','+q.y))return;ctx.fillStyle=ROLES[q.role].c;ctx.fillRect(sx(q.view.x-0.5)+m*0.2,sy(q.view.y-0.5)+m*0.2,m*0.6,m*0.6);});
+    /* you: gold dot, cyan arrow where the party faces */
+    ctx.strokeStyle='#5fd6ff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(pcx,pcy);ctx.lineTo(pcx+Math.cos(V.a)*m*1.3,pcy+Math.sin(V.a)*m*1.3);ctx.stroke();
+    ctx.fillStyle='#ffd36b';ctx.beginPath();ctx.arc(pcx,pcy,4,0,7);ctx.fill();
+    ctx.restore();
+    ctx.fillStyle='rgba(255,211,107,0.6)';ctx.font='10px "Courier New"';ctx.textAlign='right';ctx.fillText('LANTERN CONE: 5 tiles',mx0+ww,my0+hh+16);
   }
   /* compass: gold notch = where you look, cyan arrow = where the party faces */
   const ccx=CW/2,ccy=CH-48,df=V.a-LA;
@@ -1327,7 +1354,7 @@ function updateView(dt){
   }
 }
 function renderBlind(){
-  const t=now(),W=cB.width,Hh=cB.height,bp=S.players[S.bi],V=bp.view,ctx=xB,hasGun=bp.role==='gunner';
+  const t=now(),W=cB.width,Hh=cB.height,bp=S.players[S.bi],V=bp.view,ctx=xB;
   ctx.fillStyle='#000';ctx.fillRect(0,0,W,Hh);
   const fg=ctx.createLinearGradient(0,Hh/2,0,Hh);
   fg.addColorStop(0,'rgba(30,40,70,0.0)');fg.addColorStop(1,'rgba(30,40,70,0.22)');
@@ -1383,7 +1410,7 @@ function renderBlind(){
     const screenX=Math.floor((W/2)*(1+tx/ty));
     const size=Math.min(Hh*3,Math.floor(Hh/ty*(it.k==='g'?0.95:it.k==='p'?0.8:1.0)));
     const bob=it.k==='g'?Math.sin(t*4+it.id)*size*0.04:0;
-    const isG=it.k==='g',bw=size,bh=size;
+    const isG=it.k==='g',bw=it.k==='p'?Math.floor(size*0.75):size,bh=size;
     const top=Math.floor(isG?Hh/2+size/2-bh+bob:it.k==='p'?Hh/2+Math.floor(Hh/ty)/2-bh:Hh/2-size/2+bob),x0=Math.floor(screenX-bw/2);
     for(let sx=Math.max(0,x0);sx<Math.min(W,x0+bw);sx++){
       if(ty>=zbuf[sx])continue;
@@ -1395,9 +1422,9 @@ function renderBlind(){
         ctx.drawImage(ghostCanvas(it,t),tex,0,1,MON_SZ,sx,top,1,bh);
         ctx.globalAlpha=1;
       }else if(it.k==='p'){
-        const tex=Math.floor((sx-x0)/bw*16);
+        const tex=Math.floor((sx-x0)/bw*24);
         ctx.globalAlpha=Math.min(1,a*1.4);
-        ctx.drawImage(roleCanv(it.role),tex,0,1,16,sx,top,1,bh);
+        ctx.drawImage(roleCanv(it.role),tex,0,1,32,sx,top,1,bh);
         ctx.globalAlpha=1;
       }else if(Math.abs(sx-screenX)<size*0.22){
         ctx.fillStyle='rgba(255,211,107,'+(a*0.55*(0.7+0.3*Math.sin(t*4)))+')';
@@ -1410,23 +1437,38 @@ function renderBlind(){
   for(let i=0;i<60+Math.floor(S.dread*520);i++)ctx.fillRect(Math.random()*W,Math.random()*Hh,1,1);
   ctx.fillStyle='rgba(255,211,107,0.5)';
   ctx.fillRect(W/2-5,Hh/2,4,1);ctx.fillRect(W/2+2,Hh/2,4,1);ctx.fillRect(W/2,Hh/2-5,1,4);ctx.fillRect(W/2,Hh/2+2,1,4);
-  const rec=S.shotBy===bp.id?Math.max(0,1-(t-S.shotT)/0.12)*10:0;
-  const gx=W/2+26,gy=Hh-70+rec;
-  ctx.globalAlpha=hasGun?0.78:0;
-  ctx.fillStyle='#232331';ctx.fillRect(gx+10,gy+50,56,30);          /* sleeve */
-  ctx.fillStyle='#d9a878';ctx.fillRect(gx+6,gy+30,40,26);            /* hand */
-  ctx.fillStyle='#b98558';ctx.fillRect(gx+6,gy+48,40,8);
-  ctx.fillStyle='#3a3a4c';ctx.fillRect(gx+12,gy+6,30,34);            /* slide */
-  ctx.fillStyle='#5a5a72';ctx.fillRect(gx+14,gy+8,8,30);
-  ctx.fillStyle='#262634';ctx.fillRect(gx+30,gy+8,10,30);
-  ctx.fillStyle='#16161f';ctx.fillRect(gx+22,gy-4,12,12);            /* muzzle */
-  ctx.fillStyle='#8a8aa6';ctx.fillRect(gx+26,gy+2,4,3);              /* front sight */
-  ctx.globalAlpha=1;
-  if(hasGun&&S.shotBy===bp.id&&t-S.shotT<0.1){
-    ctx.save();ctx.globalCompositeOperation='lighter';
-    const mg=ctx.createRadialGradient(gx+28,gy-4,1,gx+28,gy-4,60);
-    mg.addColorStop(0,'rgba(255,240,170,0.9)');mg.addColorStop(1,'rgba(255,160,40,0)');
-    ctx.fillStyle=mg;ctx.fillRect(0,0,W,Hh);ctx.restore();
+  /* what is in your hands */
+  const sa=S.shotBy===bp.id?t-S.shotT:9;
+  if(bp.role==='archer'){
+    const ready=Math.min(1,Math.max(0,(sa-0.15)/0.35)),pull=0.62*ready;
+    const cx0=W/2+96,cy0=Hh-58,r=70,a0=Math.PI*0.7,a1=Math.PI*1.3;
+    const tx=cx0+Math.cos(a0)*r,ty=cy0+Math.sin(a0)*r,bx=cx0+Math.cos(a1)*r,by=cy0+Math.sin(a1)*r;
+    const mx=(tx+bx)/2+pull*34,my=(ty+by)/2+pull*10;
+    ctx.globalAlpha=0.9;
+    ctx.strokeStyle='#6e3d24';ctx.lineWidth=5;ctx.beginPath();ctx.arc(cx0,cy0,r,a0,a1);ctx.stroke();
+    ctx.strokeStyle='#8a5a38';ctx.lineWidth=2;ctx.beginPath();ctx.arc(cx0,cy0,r-1,a0+0.1,a1-0.1);ctx.stroke();
+    ctx.strokeStyle='#d8cfae';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(tx,ty);ctx.lineTo(mx,my);ctx.lineTo(bx,by);ctx.stroke();
+    if(ready>0.2){ctx.strokeStyle='#a89a74';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(mx,my);ctx.lineTo(cx0-r*0.25,cy0-10-pull*8);ctx.stroke();
+      ctx.fillStyle='#9aa0aa';ctx.fillRect(cx0-r*0.25-3,cy0-14-pull*8,5,5);}
+    ctx.fillStyle='#d9a878';ctx.fillRect(mx-6,my-4,14,12);                 /* the drawing hand */
+    ctx.fillStyle='#d9a878';ctx.fillRect(cx0-r+4,cy0-12,14,26);            /* the bow hand */
+    ctx.fillStyle='#4a4a3a';ctx.fillRect(cx0-r+2,cy0+10,18,24);
+    ctx.globalAlpha=1;
+  }else if(bp.role==='thief'){
+    const picking=bp.pick?1:0,wig=picking?Math.sin(t*38)*3:0;
+    ctx.globalAlpha=0.9;
+    ctx.fillStyle='#d9a878';ctx.fillRect(W/2+20,Hh-52,34,40);
+    ctx.fillStyle='#4a3426';ctx.fillRect(W/2+16,Hh-20,42,20);
+    ctx.strokeStyle='#c0c4ce';ctx.lineWidth=2;
+    ctx.beginPath();ctx.moveTo(W/2+30,Hh-52);ctx.lineTo(W/2+22+wig,Hh-86);ctx.lineTo(W/2+18+wig,Hh-90);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(W/2+42,Hh-52);ctx.lineTo(W/2+38-wig,Hh-82);ctx.stroke();
+    ctx.globalAlpha=1;
+    if(picking){
+      const prog=bp.pick.prog!==undefined?bp.pick.prog:Math.min(1,(t-bp.pick.t0)/bp.pick.dur);
+      ctx.fillStyle='rgba(0,0,0,0.65)';ctx.fillRect(W/2-52,Hh/2+40,104,12);
+      ctx.fillStyle='#ffd36b';ctx.fillRect(W/2-50,Hh/2+42,100*prog,8);
+      ctx.fillStyle='#ffd36b';ctx.font='10px "Courier New"';ctx.textAlign='center';ctx.fillText('PICKING LOCK',W/2,Hh/2+36);
+    }
   }
   const vg=ctx.createRadialGradient(W/2,Hh/2,Hh*0.3,W/2,Hh/2,W*0.7);
   vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.7)');
@@ -1444,26 +1486,168 @@ function renderBlind(){
   }
   drawScare(xB,W,Hh,t);
 }
+const iconCache={};
+function roleIcon(r){return iconCache[r]||(iconCache[r]=roleCanv(r).toDataURL());}
 function renderHud(){
   const t=now(),hearts=n=>'♥'.repeat(Math.max(0,n))+'<span style="opacity:.25">'+'♥'.repeat(Math.max(0,3-n))+'</span>';
-  const ammo='▮'.repeat(S.ammo)+'<span style="opacity:.25">'+'▯'.repeat(Math.max(0,LEVELS[lvl].ammo-S.ammo))+'</span>';
+  const ammo='➶'.repeat(S.ammo)+'<span style="opacity:.25">'+'➶'.repeat(Math.max(0,LEVELS[lvl].ammo-S.ammo))+'</span>';
   const K=S.players[0];
   const rows=S.players.map((p,i)=>{
     let st='';
-    if(p.dead)st=' <span style="opacity:.6">'+(p.how==='eaten'?'eaten':'down')+'</span>';
+    if(p.pick&&!p.dead)st=' <span style="color:#ffd36b">picking lock...</span>';
+    else if(p.dead)st=' <span style="opacity:.6">'+(p.how==='eaten'?'eaten':'down')+'</span>';
     else if(t<p.stunUntil)st=' <span style="color:#ff8080">blinded</span>';
     else if(i>0&&assist&&i!==S.act&&p.lost)st=' <span style="color:#ffb86b">LOST</span>';
     else if(i>0){const d=Math.round(Math.hypot(p.x-K.x,p.y-K.y));st=' <span style="opacity:.5">'+d+' away</span>';}
-    return (i===S.act?'<b>▶ ':'&nbsp; ')+p.name.padEnd(7,' ').replace(/ /g,'&nbsp;')+(i===S.act?'</b>':'')+' <span class="hp">'+hearts(p.hp)+'</span>'+st;
+    const icon='<img src="'+roleIcon(p.role)+'" style="height:22px;vertical-align:middle;image-rendering:pixelated;margin-right:4px;'+(p.dead?'filter:grayscale(1) brightness(.5)':'')+'">';
+    return (i===S.act?'<b>▶ ':'&nbsp; ')+icon+p.name.padEnd(6,' ').replace(/ /g,'&nbsp;')+(i===S.act?'</b>':'')+' <span class="hp">'+hearts(p.hp)+'</span>'+st;
   }).join('<br>');
   const note=S.note&&t-S.note.t<4?'<br><span style="color:#ffb0b0">'+S.note.text+'</span>':'';
   const wait=S.waiting&&S.waiting.length?'<br><span style="color:#ffd36b">King is at the exit. Waiting for: '+S.waiting.join(', ')+'</span>':'';
   $('hud').innerHTML=
    '<b>LEVEL '+(lvl+1)+'</b> '+S.name+' &nbsp; '+S.w+'x'+S.h+'<br>'+rows+'<br>'+
-   'AMMO '+(LEVELS[lvl].ammo?ammo:'none')+' &nbsp; BELL: <b>'+BELLS[bellIdx]+'</b> &nbsp; GHOSTS: '+S.ghosts.length+
+   'ARROWS '+(LEVELS[lvl].ammo?ammo:'none')+' &nbsp; BELL: <b>'+BELLS[bellIdx]+'</b> &nbsp; GHOSTS: '+S.ghosts.length+
    (LEVELS[lvl].stalk?'<br><span style="color:#ffb0b0">STALKERS: they freeze while the king looks at them</span>':'')+note+wait;
   const lb=$('blindLabel');if(lb)lb.textContent='BLIND VIEW: '+S.players[S.bi].name+(S.act===S.bi?' (you)':'');
 }
+
+/* ===================== NET: lobby + online play ===================== */
+const NET={id:null,es:null,myRole:null,lobby:null,addrs:[]};
+const ROLE_IDX={king:0,archer:1,thief:2};
+const ROLE_LABEL={king:'KING (sighted, rings the bell)',archer:'ARCHER (blind, shoots ghosts)',thief:'THIEF (blind, picks locks)'};
+let snapSeq=0,lastSnap=0,lastSeq=-1,netEpoch=-1,lastBlindSend=0;
+function netSend(m){if(!NET.id)return;try{fetch('/msg?id='+NET.id,{method:'POST',body:JSON.stringify(m),keepalive:true}).catch(()=>{});}catch(e){}}
+async function netJoin(){
+  const name=($('lbName').value||'').trim()||'Player';
+  audio();
+  try{
+    const r=await fetch('/join?name='+encodeURIComponent(name));
+    if(!r.ok)throw new Error('bad');
+    NET.id=(await r.json()).id;
+    NET.es=new EventSource('/events?id='+NET.id);
+    NET.es.onmessage=e=>onNet(JSON.parse(e.data));
+    $('lbJoin').style.display='none';$('lbRoom').style.display='block';
+  }catch(err){$('lbErr').textContent='No lobby server found. Run "node server.js" on one computer, then open its address in the browser (not the file).';}
+}
+function renderLobby(){
+  const L=NET.lobby;if(!L)return;
+  $('lbAddr').textContent=(L.addrs&&L.addrs.length?L.addrs.join('  or  '):location.host);
+  $('lbList').innerHTML=L.players.map(p=>'<div class="row"><span>'+(p.id===NET.id?'▶ ':'')+p.name.replace(/</g,'&lt;')+'</span><span style="color:#ffd36b">'+(p.role?ROLE_LABEL[p.role].split(' ')[0]:'(no role)')+'</span></div>').join('');
+  const mine=L.players.find(p=>p.id===NET.id);
+  $('lbRoles').innerHTML=Object.keys(ROLE_LABEL).map(r=>{
+    const owner=L.players.find(p=>p.role===r);
+    const dis=owner&&owner.id!==NET.id;
+    return '<button data-r="'+r+'" '+(dis?'disabled':'')+'>'+(mine&&mine.role===r?'✔ ':'')+ROLE_LABEL[r]+(dis?' — '+owner.name:'')+'</button>';
+  }).join('<br>');
+  $('lbRoles').querySelectorAll('button').forEach(b=>b.onclick=()=>netSend({t:'role',role:b.dataset.r}));
+  const blind=L.players.filter(p=>p.role&&p.role!=='king').length,isKing=mine&&mine.role==='king';
+  $('lbStart').disabled=!(isKing&&blind>=1);
+  $('lbHint').textContent=!mine||!mine.role?'Pick a role.':isKing?(blind>=1?'Roles nobody takes are played by bots that follow the king. Start when ready.':'Waiting for at least one blind teammate to pick a role.'):'Waiting for the king to start.';
+  if(started&&MODE==='king'){   /* someone left mid-game: their body becomes a bot */
+    HUMANS=new Set(L.players.map(p=>p.role).filter(r=>r&&r!=='king'));
+    S.players.forEach(q=>{q.human=HUMANS.has(q.id);});
+  }
+}
+function startNet(m){
+  const me=m.players.find(p=>p.id===NET.id);
+  if(!me)return;
+  NET.myRole=me.role;
+  MODE=me.role==='king'?'king':'blind';
+  HUMANS=new Set(m.players.map(p=>p.role).filter(r=>r!=='king'));
+  $('lobby').style.display='none';
+  started=true;audio();
+  if(MODE==='blind'){document.body.classList.add('blindmode');$('bstage').appendChild($('msg'));}
+  $('legend').innerHTML=MODE==='king'
+    ?'<b>You are the KING.</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move relative to where you look, <kbd>Mouse</kbd> look (click view, <kbd>Esc</kbd> frees), <kbd>Q</kbd>/<kbd>E</kbd> bell left/right, <kbd>B</kbd> bell sound, <kbd>C</kbd> look ahead.<br><kbd>2</kbd><kbd>3</kbd> peek through a teammate\'s blind view. <kbd>R</kbd> restart, <kbd>Enter</kbd> next level. Win: you at the exit with everyone alive within 4 tiles.'
+    :'<b>You are '+NET.myRole.toUpperCase()+' (blind).</b> <kbd>W</kbd>/<kbd>S</kbd> walk, <kbd>A</kbd>/<kbd>D</kbd> turn. Listen for the king\'s bell: left ear = go left. Stay with the king!<br>'+(NET.myRole==='archer'?'<kbd>Space</kbd> loose an arrow (it hits friends too).':'<kbd>F</kbd> pick the lock of a door next to you (hold still, it is noisy), or shut an open one.');
+  loadLevel(0);hideMsg();
+  if(MODE==='blind'){const i=ROLE_IDX[NET.myRole];S.act=S.bi=i;netEpoch=-1;lastSeq=-1;}
+}
+function onNet(m){
+  if(m.t==='lobby'){NET.lobby=m;renderLobby();}
+  else if(m.t==='start')startNet(m);
+  else if(m.t==='snap'&&MODE==='blind')applySnap(m);
+  else if(m.t==='in'&&MODE==='king')applyRemote(m);
+  else if(m.t==='hostleft'){alert('The king left. Back to the lobby.');location.reload();}
+}
+/* king's browser: what each remote person asked to do */
+function applyRemote(m){
+  if(S.state!=='play')return;
+  const p=S.players[ROLE_IDX[m.role]];
+  if(!p||!p.human||!canAct(p,now()))return;
+  const t=now(),cd=0.2*0.8;
+  if(m.k==='fwd'&&t-p.lastMove>=cd){step(p,p.dir.x,p.dir.y,false);p.lastMove=t;}
+  else if(m.k==='back'&&t-p.lastMove>=cd){step(p,-p.dir.x,-p.dir.y,false);p.lastMove=t;}
+  else if(m.k==='turn')turn(p,m.d);
+  else if(m.k==='shoot')shoot(p);
+  else if(m.k==='door')toggleDoor(p);
+}
+function makeSnap(t){
+  const ev=EVQ.splice(0,EVQ.length);
+  return {t:'snap',seq:++snapSeq,epoch:S.epoch,lvl,state:S.state,ammo:S.ammo,bellIdx,loseWhy:S.loseWhy||'',
+    note:S.note?{text:S.note.text,age:t-S.note.t}:null,waiting:S.waiting,
+    players:S.players.map(p=>({x:p.x,y:p.y,dx:p.dir.x,dy:p.dir.y,hp:p.hp,dead:p.dead,how:p.how,pick:p.pick?Math.min(1,(t-p.pick.t0)/p.pick.dur):-1,stun:Math.max(0,p.stunUntil-t),hurt:Math.max(0,p.hurtUntil-t),lost:p.lost})),
+    ghosts:S.ghosts.map(g=>({id:g.id,x:g.x,y:g.y,alert:Math.max(0,g.alert-t),frozen:!!g.frozen})),
+    doors:S.doorOpen,pings:S.pings.map(q=>({side:q.side,age:t-q.t})),
+    shot:{by:S.shotBy,age:t-S.shotT},scare:S.scare?{age:t-S.scare.t,victim:S.scare.victim,name:S.scare.name}:null,
+    blackout:Math.max(0,S.blackoutUntil-t),ev};
+}
+/* a remote player's browser: copy the king's world into the local mirror, then render + play audio from it */
+function applySnap(m){
+  if(m.seq<=lastSeq)return;
+  lastSeq=m.seq;
+  const t=now(),me=ROLE_IDX[NET.myRole];
+  if(m.epoch!==netEpoch){netEpoch=m.epoch;loadLevel(m.lvl);S.act=S.bi=me;hideMsg();}
+  bellIdx=m.bellIdx;S.ammo=m.ammo;S.doorOpen=m.doors;S.waiting=m.waiting||[];S.loseWhy=m.loseWhy;
+  S.note=m.note?{text:m.note.text,t:t-m.note.age}:null;
+  m.players.forEach((q,i)=>{
+    const p=S.players[i];
+    p.pick=q.pick>=0?{prog:q.pick}:null;p.x=q.x;p.y=q.y;p.dir={x:q.dx,y:q.dy};p.hp=q.hp;p.dead=q.dead;p.how=q.how;p.lost=q.lost;
+    p.stunUntil=t+q.stun;p.hurtUntil=t+q.hurt;
+  });
+  const L=S.players[me];
+  const old=S.ghosts;
+  S.ghosts=m.ghosts.map(gs=>{
+    let g=old.find(o=>o.id===gs.id);
+    if(!g)g={id:gs.id,x:gs.x,y:gs.y};
+    if((g.x!==gs.x||g.y!==gs.y)&&Math.abs(gs.x-L.x)+Math.abs(gs.y-L.y)<=7){
+      const nd=Math.abs(gs.x-L.x)+Math.abs(gs.y-L.y);
+      tone('sine',95,70,0.14,0.28*(1-nd/8),Math.sin(Math.atan2(gs.y-L.y,gs.x-L.x)-L.view.a));
+    }
+    g.x=gs.x;g.y=gs.y;g.alert=t+gs.alert;g.frozen=gs.frozen;
+    return g;
+  });
+  S.pings=m.pings.map(q=>({side:q.side,t:t-q.age}));
+  S.shotBy=m.shot.by;S.shotT=t-m.shot.age;
+  S.blackoutUntil=t+m.blackout;
+  if(m.scare&&!S.scare)S.scare={t:t-m.scare.age,victim:m.scare.victim,name:m.scare.name};
+  for(const e of m.ev||[]){
+    if(e.e==='bell')playBell(e.side);
+    else if(sfx[e.e])sfx[e.e]();
+  }
+  if(m.state!==S.state){
+    S.state=m.state;
+    if(m.state==='win')showMsg('ESCAPED','Level '+(m.lvl+1)+' clear<div class="small">Waiting for the king to continue.</div>');
+    else if(m.state==='lose')S.msgAt=now()+(S.scare?1.8:0.4);
+  }
+}
+/* blind remote player's controls: W/S walk, A/D turn, Space shoot (gunner), F door (door-op) */
+function blindPress(k){
+  if(k==='a'||k==='arrowleft')netSend({t:'in',k:'turn',d:-1});
+  else if(k==='d'||k==='arrowright')netSend({t:'in',k:'turn',d:1});
+  else if(k===' ')netSend({t:'in',k:'shoot'});
+  else if(k==='f')netSend({t:'in',k:'door'});
+}
+function blindHeld(t){
+  if(S.state!=='play'||t-lastBlindSend<0.17)return;
+  if(keys['w']||keys['arrowup']){netSend({t:'in',k:'fwd'});lastBlindSend=t;}
+  else if(keys['s']||keys['arrowdown']){netSend({t:'in',k:'back'});lastBlindSend=t;}
+}
+$('lbJoinBtn').onclick=netJoin;
+$('lbStart').onclick=()=>netSend({t:'start'});
+$('lbSolo').onclick=()=>{MODE='solo';$('lobby').style.display='none';audio();};
+$('lbName').addEventListener('keydown',e=>{if(e.key==='Enter')netJoin();e.stopPropagation();});
+$('lbName').value='Player'+(1+Math.floor(Math.random()*99));
 
 /* ===================== INPUT + LOOP ===================== */
 const keys={};
@@ -1485,15 +1669,18 @@ function moveTable(){
 }
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
+  if($('lobby').style.display!=='none')return;
   if(['arrowup','arrowdown','arrowleft','arrowright',' ','tab'].includes(k))e.preventDefault();
   keys[k]=true;
+  if(MODE==='blind'){if(!e.repeat)blindPress(k);return;}
   if(!started){started=true;audio();hideMsg();return;}
   if(e.repeat)return;
   if(k==='r'){loadLevel(S.state==='win'&&lvl>=LEVELS.length-1?0:lvl);return;}
   if(k==='t'){assist=!assist;return;}
-  if(S.state==='play'&&(k>='1'&&k<='4'||k==='tab')){
-    let i=k==='tab'?(S.act+1)%4:Number(k)-1;
-    for(let n=0;n<4&&S.players[i].dead;n++)i=(i+1)%4;
+  if(MODE==='king'&&k>='2'&&k<='3'){S.bi=Number(k)-1;return;}   /* online: the king only chooses which blind view to peek at */
+  if(S.state==='play'&&MODE==='solo'&&(k>='1'&&k<='3'||k==='tab')){
+    let i=k==='tab'?(S.act+1)%3:Number(k)-1;
+    for(let n=0;n<3&&S.players[i].dead;n++)i=(i+1)%3;
     if(!S.players[i].dead){S.act=i;if(i>0)S.bi=i;}
     return;
   }
@@ -1534,8 +1721,16 @@ addEventListener('mousemove',e=>{
 let lastFrame=now();
 function frame(){
   const t=now(),dt=Math.min(0.1,Math.max(0.001,t-lastFrame));lastFrame=t;
+  if(MODE==='blind'){
+    blindHeld(t);
+    if(S.state==='play')dreadAudio(t,dt);else if(drone)setParam(drone.g.gain,0.0);
+    if(S.state==='lose'&&S.msgAt&&t>S.msgAt){S.msgAt=0;showMsg('CAUGHT',(S.loseWhy||'The ghosts found you.')+'<div class="small">The king restarts the run.</div>');}
+    updateView(dt);renderBlind();renderHud();
+    requestAnimationFrame(frame);return;
+  }
+  if(MODE==='king'&&t-lastSnap>0.05){lastSnap=t;netSend(makeSnap(t));}
   const ap=S.players[S.act];
-  if(S.state==='play'&&started&&canAct(ap,t)&&t-ap.lastMove>(ap.role==='leader'?0.14:ap.role==='driver'?0.13:0.2)){
+  if(S.state==='play'&&started&&canAct(ap,t)&&t-ap.lastMove>(ap.role==='leader'?0.14:0.2)){
     if(S.act===0){
       for(const [k,dx,dy] of moveTable()){
         if(keys[k]){step(ap,dx,dy);ap.lastMove=t;break;}
