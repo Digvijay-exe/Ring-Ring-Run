@@ -828,8 +828,9 @@ function ghostCanvas(it,t){
 const roleCv={};
 /* the three people, painted as 24x32 pixel-art figures (hooded archer, masked thief, crowned king) */
 function paintPerson(role){
-  const c=document.createElement('canvas');c.width=24;c.height=32;const x=c.getContext('2d');
-  const R=(col,a,b,w,h)=>{x.fillStyle=col;x.fillRect(a,b,w,h);};
+  const c=document.createElement('canvas');c.width=48;c.height=64;const x=c.getContext('2d');
+  const R=(col,a,b,w,h)=>{x.fillStyle=col;x.fillRect(a*2,b*2,w*2,h*2);};      /* base shapes on a 24x32 grid */
+  const D=(col,a,b,w,h)=>{x.fillStyle=col;x.fillRect(a,b,w,h);};              /* detail pixels on the 48x64 grid */
   if(role==='archer'){
     const hood='#454b3a',hoodD='#2f3329',hoodL='#5a6350',face='#16140f',mask='#23221d',eye='#d9c89a',tun='#5c6552',tunD='#444b3c',sl='#d6cbb0',slD='#b3a88c',lea='#6b4a32',leaD='#3d281c',pan='#2b2b30',boot='#5a3a28',bootD='#3f281b',wood='#6e3d24',woodL='#8a5a38',str='#d8cfae',shaft='#a89a74',steel='#9aa0aa',skin='#c99a6c';
     R(wood,20,1,2,1);R(wood,21,2,1,2);R(wood,22,4,1,4);R(wood,23,8,1,14);R(wood,22,22,1,4);R(wood,21,26,1,2);R(wood,20,28,2,1);R(woodL,23,12,1,6);R(str,20,2,1,26);
@@ -845,6 +846,20 @@ function paintPerson(role){
     R(sl,3,13,5,3);R(slD,3,15,5,1);R(lea,1,15,4,2);R(skin,0,15,2,2);
     R(shaft,2,16,18,1);R(steel,0,16,3,1);R(steel,1,15,1,3);R(str,17,15,2,3);
     R(sl,17,13,5,3);R(slD,17,15,5,1);R(lea,19,15,3,2);R(skin,19,17,3,2);
+    /* --- archer detail --- */
+    D(hoodL,16,5,12,1);D(hoodL,14,8,2,10);D(hoodD,24,8,1,12);D(hoodD,30,6,1,14);D('#3a3f31',12,6,1,16);   /* hood folds + highlight */
+    D(eye,18,11,1,1);D('#000',20,12,1,1);D(eye,26,11,1,1);D('#000',28,12,1,1);D('#2e2d27',17,16,14,1);D('#2e2d27',18,18,12,1);   /* eyes, mask weave */
+    D(hoodL,12,22,3,2);D(hoodD,34,22,2,3);D('#4a5240',20,23,8,1);                                                        /* cowl */
+    D('#6e7863',14,26,2,12);D(tunD,21,27,1,12);D(tunD,28,29,1,10);D(tunD,24,25,1,6);D('#6e7863',33,28,1,8);               /* tunic folds */
+    for(let i=0;i<8;i++){D(steel,17+i*2,26+i*2,1,1);}                                                                   /* strap studs */
+    D(lea,24,42,7,7);D(leaD,24,42,7,1);D(leaD,24,48,7,1);D(steel,27,44,1,2);D(lea,34,43,4,5);D(leaD,34,43,4,1);          /* belt pouches */
+    D(leaD,12,40,24,1);D('#8a6a48',12,41,24,1);D(steel,22,40,4,3);                                                       /* belt highlight + buckle */
+    D('#a02a2a',8,4,2,3);D('#a02a2a',10,6,2,3);D('#d8cfae',9,2,1,2);D(lea,8,12,1,14);D(leaD,12,10,1,16);                 /* quiver fletching + straps */
+    D(leaD,2,32,8,1);D(leaD,2,34,8,1);D(slD,6,28,1,6);D(slD,36,28,1,6);D(slD,40,26,1,6);                                 /* laced bracers, sleeve folds */
+    D('#d8cfae',36,31,1,5);D(steel,0,32,5,1);D('#e8e8f0',1,31,2,1);                                                     /* arrow nock + head gleam */
+    D(tunD,14,52,2,4);D(tunD,20,53,2,5);D(tunD,26,52,2,3);D(tun,31,53,2,4);D(tunD,17,56,1,2);                           /* ragged hem */
+    D('#7a5238',16,60,2,3);D('#7a5238',26,60,2,3);D(bootD,14,58,10,1);D(bootD,24,58,10,1);D(lea,16,59,6,1);D(lea,26,59,6,1);   /* boots: folds, laces */
+    D(woodL,45,10,1,8);D(woodL,45,38,1,8);D(leaD,46,24,2,4);                                                            /* bow grip + highlights */
   }else if(role==='thief'){
     const hood='#7b5a3a',hoodD='#573d27',hoodL='#946e47',mask='#17151a',scarf='#2c2832',scarfL='#3d3844',vest='#6d4b2e',vestD='#4f351f',sl='#d9cfb4',slD='#b5aa8d',brace='#4a3426',sash='#3a3f52',sashD='#292d3b',cloth='#7d5c3d',clothD='#5d4229',pan='#2d2b34',boot='#5d3d2a',bootD='#412a1c',steel='#c0c4ce',steelD='#808694',skin='#c99a6c',eye='#e6dcc0';
     R(hood,7,1,10,3);R(hood,6,3,12,8);R(hoodD,6,3,2,8);R(hoodL,9,2,5,1);
@@ -856,6 +871,18 @@ function paintPerson(role){
     R(sash,7,20,10,2);R(sashD,7,21,10,1);
     R(cloth,7,22,10,6);R(clothD,7,22,2,6);R(clothD,8,28,1,1);R(clothD,10,28,1,1);R(clothD,12,28,1,1);R(clothD,14,28,1,1);
     R(pan,8,26,3,4);R(pan,13,26,3,4);R(boot,7,29,5,3);R(boot,12,29,5,3);R(bootD,7,31,5,1);R(bootD,12,31,5,1);
+    /* --- thief detail --- */
+    D(hoodL,16,4,12,1);D(hoodL,14,8,2,10);D(hoodD,24,7,1,10);D(hoodD,31,6,1,14);D('#6a4a2f',12,6,1,16);                   /* hood folds */
+    D(eye,18,12,1,1);D('#000',19,12,1,1);D(eye,27,12,1,1);D('#000',28,12,1,1);D('#2c2933',18,15,12,1);D('#2c2933',17,17,14,1); /* eyes, mask */
+    D(scarfL,10,22,6,1);D(scarfL,32,22,6,1);D(scarfL,18,26,10,1);D(scarfL,21,30,6,1);D('#1d1a22',14,24,20,1);              /* scarf folds */
+    D(vestD,16,36,1,10);D(vestD,31,34,1,12);D('#8a6240',20,28,1,8);D('#8a6240',27,30,1,8);                               /* vest creases */
+    for(let i=0;i<7;i++){D(brace,14+i*3,28+i*3,2,2);}D(steel,16,30,1,3);D(steel,22,36,1,3);D(steel,28,41,1,3);            /* bandolier + throwing knives */
+    D('#f2e8cc',6,28,1,10);D(slD,12,28,1,8);D(slD,35,30,1,8);D('#f2e8cc',36,28,1,6);                                    /* sleeve light/fold */
+    D('#2a1c14',6,38,6,1);D('#2a1c14',6,40,6,1);D('#2a1c14',34,38,6,1);D('#2a1c14',34,40,6,1);D(steel,5,46,1,8);D('#eef0f8',5,48,1,3);D('#6a4a2f',4,44,3,2);   /* laced bracers, dagger + gleam */
+    D(steel,42,44,1,14);D('#eef0f8',42,46,1,3);D(steelD,43,50,1,8);D('#6a4a2f',41,43,3,2);                                /* sword at hip */
+    D('#4a5069',14,40,20,1);D(steel,22,40,4,3);D('#2a2e3f',14,43,20,1);D(brace,30,44,6,5);D(vestD,30,44,6,1);            /* sash, buckle, pouch */
+    D(clothD,16,48,1,8);D(clothD,22,50,1,6);D(clothD,28,48,1,8);D(cloth,18,57,1,2);D(clothD,20,57,1,2);D(clothD,24,57,1,2);D(clothD,30,57,1,2); /* skirt folds + fringe */
+    D('#7a5238',16,60,2,3);D('#7a5238',26,60,2,3);D(bootD,14,58,10,1);D(bootD,24,58,10,1);D(brace,16,59,6,1);D(brace,26,59,6,1);D(steelD,19,59,1,1);D(steelD,29,59,1,1);
   }else{
     const gold='#ffd36b',goldD='#c9972a',skin='#e8c49a',beard='#d8d8d8',robe='#6b3fa0',robeD='#4a2a72',robeL='#8a5cc0',boot='#2b2230';
     R(gold,8,1,8,2);R(gold,8,0,1,1);R(gold,11,0,2,1);R(gold,15,0,1,1);R('#ff4a4a',11,1,2,1);
@@ -865,13 +892,25 @@ function paintPerson(role){
     R(gold,19,16,4,4);R(goldD,18,20,5,1);R(goldD,20,15,2,1);
     R('#4a4458',2,17,3,1);R(gold,2,18,3,3);R('#fff2b0',3,19,1,1);
     R(boot,7,28,5,4);R(boot,12,28,5,4);
+    /* --- king detail --- */
+    D('#ff7a7a',22,3,1,1);D('#fff2b0',17,1,2,1);D(goldD,16,2,16,1);D('#fff2b0',31,1,1,2);D(goldD,24,0,1,2);                  /* crown shine, jewels */
+    D('#4aa3ff',18,3,2,2);D('#4aa3ff',28,3,2,2);D('#ff4a4a',23,3,2,2);
+    D('#b98a60',18,10,1,2);D('#5a4a3a',19,9,3,1);D('#5a4a3a',27,9,3,1);D('#17151a',20,11,1,2);D('#17151a',27,11,1,2);D('#fff',20,11,1,1); /* brows + eyes */
+    D('#b0b0b8',20,16,1,6);D('#e8e8f0',24,15,1,7);D('#b0b0b8',28,16,1,5);                                                 /* beard strands */
+    D('#f4f4f8',10,22,28,2);for(let i=0;i<14;i++){D('#17151a',10+i*2,23,1,1);}                                           /* ermine collar */
+    D(robeL,14,28,2,16);D('#7a4cb0',34,30,1,12);D(robeD,22,30,1,22);D(robeD,26,30,1,22);D(goldD,18,26,12,1);              /* robe folds + embroidery */
+    for(let i=0;i<5;i++){D(gold,12+i*2,34+i*4,1,1);D(gold,35-i*2,34+i*4,1,1);}
+    D('#3a2260',12,46,24,2);D(gold,22,46,4,3);D(goldD,22,48,4,1);                                                        /* belt + buckle */
+    D('#fff2b0',38,32,3,2);D('#a07a20',40,34,5,1);D(gold,37,30,2,1);                                                      /* bell shine, rim */
+    D('#ffe28a',4,36,2,2);D('#a07a20',4,41,5,1);D('#6a6478',4,34,1,2);                                                    /* lantern glow */
+    D('#4a2a72',12,52,24,2);D(robeD,16,54,1,2);D(robeD,30,54,1,2);D('#4a3e60',16,58,6,1);D('#4a3e60',26,58,6,1);D(goldD,14,60,4,1);D(goldD,28,60,4,1); /* hem + boots */
   }
   /* dark outline around the silhouette */
-  const id=x.getImageData(0,0,24,32),d=id.data,o=new Uint8ClampedArray(d);
-  for(let yy=0;yy<32;yy++)for(let xx=0;xx<24;xx++){
-    const i=(yy*24+xx)*4;if(d[i+3])continue;
+  const id=x.getImageData(0,0,48,64),d=id.data,o=new Uint8ClampedArray(d);
+  for(let yy=0;yy<64;yy++)for(let xx=0;xx<48;xx++){
+    const i=(yy*48+xx)*4;if(d[i+3])continue;
     let near=false;
-    for(const [ox,oy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=xx+ox,ny=yy+oy;if(nx>=0&&ny>=0&&nx<24&&ny<32&&d[(ny*24+nx)*4+3]){near=true;break;}}
+    for(const [ox,oy] of [[1,0],[-1,0],[0,1],[0,-1]]){const nx=xx+ox,ny=yy+oy;if(nx>=0&&ny>=0&&nx<48&&ny<64&&d[(ny*48+nx)*4+3]){near=true;break;}}
     if(near){o[i]=18;o[i+1]=13;o[i+2]=10;o[i+3]=255;}
   }
   id.data.set(o);x.putImageData(id,0,0);
@@ -1225,9 +1264,9 @@ function renderLeaderFP(){
         fpx.drawImage(ghostCanvas(it,t),tex,0,1,MON_SZ,sx,top,1,bh);
         fpx.globalAlpha=1;
       }else if(it.k==='p'){
-        const tex=Math.floor((sx-x0)/bw*24);
+        const tex=Math.floor((sx-x0)/bw*48);
         fpx.globalAlpha=0.95*vis;
-        fpx.drawImage(roleCanv(it.role),tex,0,1,32,sx,top,1,bh);
+        fpx.drawImage(roleCanv(it.role),tex,0,1,64,sx,top,1,bh);
         fpx.globalAlpha=1;
       }else if(Math.abs(sx-screenX)<size*0.2){
         fpx.fillStyle='rgba(255,211,107,'+(0.5*(0.7+0.3*Math.sin(t*3)))+')';
@@ -1422,9 +1461,9 @@ function renderBlind(){
         ctx.drawImage(ghostCanvas(it,t),tex,0,1,MON_SZ,sx,top,1,bh);
         ctx.globalAlpha=1;
       }else if(it.k==='p'){
-        const tex=Math.floor((sx-x0)/bw*24);
+        const tex=Math.floor((sx-x0)/bw*48);
         ctx.globalAlpha=Math.min(1,a*1.4);
-        ctx.drawImage(roleCanv(it.role),tex,0,1,32,sx,top,1,bh);
+        ctx.drawImage(roleCanv(it.role),tex,0,1,64,sx,top,1,bh);
         ctx.globalAlpha=1;
       }else if(Math.abs(sx-screenX)<size*0.22){
         ctx.fillStyle='rgba(255,211,107,'+(a*0.55*(0.7+0.3*Math.sin(t*4)))+')';
@@ -1537,7 +1576,7 @@ function renderLobby(){
   $('lbRoles').innerHTML=Object.keys(ROLE_LABEL).map(r=>{
     const owner=L.players.find(p=>p.role===r);
     const dis=owner&&owner.id!==NET.id;
-    return '<button data-r="'+r+'" '+(dis?'disabled':'')+'>'+(mine&&mine.role===r?'✔ ':'')+ROLE_LABEL[r]+(dis?' — '+owner.name:'')+'</button>';
+    return '<button data-r="'+r+'" '+(dis?'disabled':'')+'><img src="'+roleIcon(r==='king'?'leader':r)+'" style="height:34px;vertical-align:middle;image-rendering:pixelated;margin-right:8px">'+(mine&&mine.role===r?'✔ ':'')+ROLE_LABEL[r]+(dis?' — '+owner.name:'')+'</button>';
   }).join('<br>');
   $('lbRoles').querySelectorAll('button').forEach(b=>b.onclick=()=>netSend({t:'role',role:b.dataset.r}));
   const blind=L.players.filter(p=>p.role&&p.role!=='king').length,isKing=mine&&mine.role==='king';
