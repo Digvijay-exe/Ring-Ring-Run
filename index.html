@@ -494,6 +494,54 @@ function beat(){
   tone('sine',68,42,0.16,v,0);
   setTimeout(()=>tone('sine',58,36,0.2,v*0.7,0),170);
 }
+
+/* ===================== BGM: generative dark score =====================
+   pad (slow minor chords that glide), music-box melody with echo, sub pulse, and a bowed stab when the ghosts are close.
+   Key and mode change per level; it speeds up and thickens with dread, and lurches when you are hit. */
+const BG={pad:null,next:0,nStep:0,note:5,chord:0,chordAt:0,pulse:0};
+const SCALES=[[0,2,3,5,7,8,10],[0,2,3,5,7,9,10],[0,1,3,5,7,8,10],[0,1,3,5,6,8,11]];   /* minor, dorian, phrygian, harmonic-ish */
+const ROOTS=[110,98,103.83,92.5];
+const PROG=[[0,3,7],[8,12,15],[5,8,12],[7,10,14]];
+function ensureBgm(){
+  if(BG.pad||!AC)return;
+  const a=AC,g=a.createGain(),f=a.createBiquadFilter(),lfo=a.createOscillator(),lg=a.createGain();
+  g.gain.value=0.0;f.type='lowpass';f.frequency.value=420;
+  lfo.frequency.value=0.13;lg.gain.value=160;lfo.connect(lg);lg.connect(f.frequency);lfo.start();   /* slow breathing filter */
+  const os=[0,1,2].map(i=>{const o=a.createOscillator();o.type=i===1?'triangle':'sawtooth';o.detune.value=(i-1)*9;o.frequency.value=110;o.connect(f);o.start();return o;});
+  f.connect(g);g.connect(a.destination);BG.pad={g,f,os};
+}
+function bgm(t,boost){
+  const a=AC;if(!a||!BG.pad)return;
+  const ct=a.currentTime,sc=SCALES[lvl%4],root=ROOTS[lvl%4];
+  const dread=S.dread||0;
+  /* pad: new chord every ~7s, glides there */
+  if(ct>=BG.chordAt){
+    BG.chord=(BG.chord+(Math.random()<0.7?1:2))%PROG.length;
+    BG.chordAt=ct+6+Math.random()*3;
+    const ch=PROG[BG.chord];
+    BG.pad.os.forEach((o,i)=>o.frequency.setTargetAtTime(root*Math.pow(2,ch[i]/12),ct,1.6));
+  }
+  setParam(BG.pad.g.gain,0.05+dread*0.05+boost*0.04);
+  BG.pad.f.frequency.setTargetAtTime(420+dread*500+boost*900,ct,0.4);
+  /* melody / pulse steps */
+  if(ct<BG.next)return;
+  const step=(0.62-lvl*0.04)/(1+0.9*dread)/(1+1.3*boost);
+  BG.next=ct+step;BG.nStep++;
+  const pn=0.5+dread*0.3+boost*0.3;
+  if(Math.random()<pn){
+    BG.note=Math.max(0,Math.min(13,BG.note+[-2,-1,-1,0,1,1,2,3][Math.floor(Math.random()*8)]));
+    const deg=BG.note%7,oct=Math.floor(BG.note/7);
+    const f=root*2*Math.pow(2,(sc[deg]+12*oct)/12)*(Math.random()<0.1?2:1);
+    const p=Math.random()*1.4-0.7,v=0.075;
+    const play=(df,vv,d)=>{tone('sine',f*df,f*df,d,vv,p);tone('sine',f*2*df,f*2*df,d*0.5,vv*0.35,p);};          /* music-box tone */
+    play(1,v,1.3);
+    setTimeout(()=>play(1,v*0.45,1.0),step*1000*0.75);                                                          /* echo */
+    setTimeout(()=>play(1,v*0.2,0.8),step*1000*1.5);
+  }
+  if(BG.nStep%4===0&&(dread>0.25||boost>0.1||lvl>=1))tone('sine',62,30,0.5,0.1+dread*0.15,0);                    /* sub thump */
+  if(BG.nStep%8===4&&lvl>=2)tone('sawtooth',root*8*Math.pow(2,sc[Math.floor(Math.random()*7)]/12),root*8,0.9,0.025,Math.random()*2-1,{type:'lowpass',f:900});   /* distant bowed wail */
+  if(dread>0.55&&BG.nStep%2===0)tone('sawtooth',root*16,root*15.2,0.28,0.035+dread*0.03,Math.random()*2-1,{type:'bandpass',f:2400});  /* strings shiver */
+}
 function ambience(t){
   if(t<S.nextAmb)return;
   S.nextAmb=t+5+Math.random()*7;
@@ -545,6 +593,7 @@ function dreadAudio(t,dt){
     whisper(bearingPan(nearest),0.5+S.dread*1.3);
     if(nd<3&&Math.random()<0.5)setTimeout(()=>whisper(-bearingPan(nearest)*0.6,0.6+S.dread),180);  /* a second voice, behind you */
   }
+  ensureBgm();bgm(t,boost);
   ambience(t);
 }
 function update(t){
@@ -1152,33 +1201,66 @@ function mkTex(fn){
   for(let y=0;y<16;y++)for(let x=0;x<16;x++){const c=fn(x,y),i=(y*16+x)*3;a[i]=c[0];a[i+1]=c[1];a[i+2]=c[2];}
   return a;
 }
-const TEX_WALL=mkTex((x,y)=>{
-  const row=y>>2,off=(row&1)?4:0,bx=(x+off)&7;
-  if((y&3)===3||bx===7)return [34,34,60];
-  const n=hash(x,y,9),bt=hash((x+off)>>3,row,4);
-  return [86+Math.floor(n*20)+Math.floor(bt*18)-9,84+Math.floor(n*18)+Math.floor(bt*16)-8,138+Math.floor(n*22)+Math.floor(bt*20)-10];
-});
-const TEX_WALL_B=(()=>{
-  const a=TEX_WALL.slice();
-  for(let x=0;x<16;x++){
-    if(hash(x,0,31)<0.62)continue;
-    const len=3+Math.floor(hash(x,1,32)*11);
-    for(let y=0;y<len;y++){
-      const i=(y*16+x)*3,k=0.85-y/len*0.35;
-      a[i]=a[i]*(1-k)+120*k;a[i+1]=a[i+1]*(1-k)+10*k;a[i+2]=a[i+2]*(1-k)+14*k;
-    }
+const WN=32;
+/* decayed brick wall, 32x32: grainy bricks, bevels, chipped pits, damp streaks, moss, cracks, a missing brick, blood.
+   pal = {base,mortar,moss} rgb. variant 0 plain rot, 1 blood, 2 cracked + broken. */
+function genWall(pal,variant,seed){
+  const a=new Uint8ClampedArray(WN*WN*3),B=pal.base,M=pal.mortar,Mo=pal.moss;
+  const cracks=[];
+  if(variant===2||variant===0&&hash(seed,1,3)>0.5){
+    const n=variant===2?3:1;
+    for(let k=0;k<n;k++){let cx=3+hash(seed,k,11)*26;const pts=[];for(let y=0;y<WN;y++){cx+=(hash(y,k,seed+9)<0.5?-1:1)*(hash(y,k+7,seed+10)<0.55?1:0);pts.push(Math.max(0,Math.min(WN-1,Math.round(cx))));}cracks.push(pts);}
   }
-  for(let y=9;y<14;y++)for(let x=3;x<9;x++){           /* a smeared handprint-ish patch */
-    if(hash(x,y,41)<0.45)continue;
-    const i=(y*16+x)*3;a[i]=a[i]*0.35+95*0.65;a[i+1]=a[i+1]*0.35+8*0.65;a[i+2]=a[i+2]*0.35+12*0.65;
+  const hole=variant===2?{bx:Math.floor(hash(seed,5,12)*2),row:1+Math.floor(hash(seed,6,13)*2)}:null;
+  for(let y=0;y<WN;y++)for(let x=0;x<WN;x++){
+    const row=y>>3,off=(row&1)?8:0,bx=(x+off)&15,ey=y&7;
+    const g1=hash(x,y,seed)*2-1,g2=hash(x>>1,y>>1,seed+5)*2-1,g3=hash(x>>2,y>>2,seed+14)*2-1;
+    let c;
+    if(ey===7||bx===15){const g=0.55+0.5*hash(x,y,seed+1);c=[M[0]*g,M[1]*g,M[2]*g];}
+    else{
+      const bt=hash((x+off)>>4,row,seed+2)*2-1;
+      let bev=0;if(ey===0)bev+=15;if(bx===0)bev+=10;if(ey===6)bev-=15;if(bx===14)bev-=10;
+      const v=bt*15+g1*20+g2*10+g3*8+bev;
+      c=[B[0]+v,B[1]+v*0.95,B[2]+v*0.9];
+      if(hash(x,y,seed+3)>0.92){c[0]*=0.55;c[1]*=0.55;c[2]*=0.55;}                   /* chipped pit */
+      if(hash(x,y,seed+4)>0.985){c[0]+=34;c[1]+=34;c[2]+=34;}                          /* a sparkle of grit */
+    }
+    if(hole&&((x+off)>>4)%2===hole.bx&&row===hole.row&&bx<14&&ey<7){                    /* a brick knocked out */
+      const g=0.16+0.18*hash(x,y,seed+20);c=[M[0]*g*2,M[1]*g*2,M[2]*g*2];
+    }
+    const sk=hash(x,0,seed+6);                                                          /* damp streak down from the ceiling */
+    if(sk>0.66){const len=6+hash(x,1,seed+7)*24;if(y<len){const k=0.42*(1-y/len);c[0]*=1-k;c[1]*=1-k;c[2]*=1-k;}}
+    const mk=y/WN;                                                                       /* grime creeps up from the floor */
+    if(y>22){const k=(y-22)/10*0.45;c[0]*=1-k;c[1]*=1-k;c[2]*=1-k;}
+    if(y>17&&hash(x>>1,y>>1,seed+8)>0.66-mk*0.2){const k=0.6;c[0]=c[0]*(1-k)+Mo[0]*k;c[1]=c[1]*(1-k)+Mo[1]*k;c[2]=c[2]*(1-k)+Mo[2]*k;}  /* moss / mould */
+    cracks.forEach(pts=>{if(pts[y]===x||(variant===2&&pts[y]===x-1&&hash(x,y,seed+30)>0.6)){c[0]*=0.22;c[1]*=0.22;c[2]*=0.22;}});
+    if(variant===1){
+      if(hash(x,0,seed+31)>0.55){const len=3+hash(x,1,seed+32)*22;if(y<len){const k=0.88-y/len*0.4;c[0]=c[0]*(1-k)+125*k;c[1]=c[1]*(1-k)+9*k;c[2]=c[2]*(1-k)+13*k;}}
+      if(y>=15&&y<=24&&x>=5&&x<=16&&hash(x,y,seed+41)>0.42){c[0]=c[0]*0.3+100*0.7;c[1]=c[1]*0.3+8*0.7;c[2]=c[2]*0.3+12*0.7;}
+    }
+    const i=(y*WN+x)*3;a[i]=c[0];a[i+1]=c[1];a[i+2]=c[2];
   }
   return a;
-})();
-const TEX_DOOR=mkTex((x,y)=>{
+}
+const WALL_PAL=[
+  {base:[84,82,134],mortar:[30,30,52],moss:[58,92,84]},    /* 1 First Toll: cold indigo */
+  {base:[62,110,102],mortar:[20,40,38],moss:[74,126,58]},  /* 2 The Door Room: drowned teal */
+  {base:[136,92,66],mortar:[50,30,22],moss:[96,104,48]},   /* 3 Dead Ends: rust and clay */
+  {base:[122,96,116],mortar:[44,26,40],moss:[110,58,94]}   /* 4 Wake the Dead: bruised plum */
+];
+const WALLS=WALL_PAL.map((pal,i)=>[genWall(pal,0,50+i*17),genWall(pal,1,51+i*17),genWall(pal,2,52+i*17)]);
+function mkTex32(fn){
+  const a=new Uint8ClampedArray(WN*WN*3);
+  for(let y=0;y<WN;y++)for(let x=0;x<WN;x++){const c=fn(x,y),i=(y*WN+x)*3;a[i]=c[0];a[i+1]=c[1];a[i+2]=c[2];}
+  return a;
+}
+const TEX_DOOR=mkTex32((X,Y)=>{
+  const x=X>>1,y=Y>>1,n=Math.floor(hash(X,Y,60)*26)-13;
   let c=(x&3)===0?[92,58,26]:[130,84,40];
+  if(hash(X>>3,Y,61)>0.7)c=[c[0]*0.8,c[1]*0.8,c[2]*0.8];                       /* grain streaks in the planks */
   if(y===2||y===3||y===12||y===13)c=[201,162,39];
   if(x>=7&&x<=8&&y>=7&&y<=9)c=[255,224,120];
-  return c;
+  return [c[0]+n,c[1]+n,c[2]+n*0.6];
 });
 const TEX_FLOOR=mkTex((x,y)=>{const t=((x>>3)+(y>>3))&1,v=(t?36:29)+Math.floor(hash(x,y,3)*8);return [v,v-1,v+16];});
 const TEX_CEIL=mkTex((x,y)=>{const t=((x>>3)+(y>>3))&1,v=(t?16:12)+Math.floor(hash(x,y,5)*5);return [v,v,v+12];});
@@ -1253,15 +1335,15 @@ function renderLeaderFP(){
     const dist=Math.max(0.05,side===0?(sdx-ddx):(sdy-ddy));
     zbuf[x]=dist;
     let wallX=side===0?V.y+dist*rdy:V.x+dist*rdx;wallX-=Math.floor(wallX);
-    let texX=Math.min(15,Math.floor(wallX*16));
-    if((side===0&&rdx>0)||(side===1&&rdy<0))texX=15-texX;
+    let texX=Math.min(WN-1,Math.floor(wallX*WN));
+    if((side===0&&rdx>0)||(side===1&&rdy<0))texX=WN-1-texX;
     const lineH=Math.floor(H/dist),top=Math.floor(half-lineH/2);
-    const tex=hc==='D'?TEX_DOOR:(hash(mx,my,77)>0.78?TEX_WALL_B:TEX_WALL);
+    const wh=hash(mx,my,77),WS=WALLS[lvl]||WALLS[0],tex=hc==='D'?TEX_DOOR:(wh>0.86?WS[1]:wh>0.6?WS[2]:WS[0]);
     const lt=(lightAt(dist)+(hc==='D'?0.10:0))*(side?0.74:1);
     const r=lt*TR,g=lt*TG,b=lt*TB;
     const y0=Math.max(0,top),y1=Math.min(H-1,top+lineH-1);
     for(let y=y0;y<=y1;y++){
-      const texY=Math.min(15,Math.floor((y-top)/lineH*16)),ti=(texY*16+texX)*3,i=(y*W+x)*4;
+      const texY=Math.min(WN-1,Math.floor((y-top)/lineH*WN)),ti=(texY*WN+texX)*3,i=(y*W+x)*4;
       d[i]=tex[ti]*r;d[i+1]=tex[ti+1]*g;d[i+2]=tex[ti+2]*b;d[i+3]=255;
     }
   }
